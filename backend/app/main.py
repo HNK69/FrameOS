@@ -64,6 +64,15 @@ app.add_middleware(CORSMiddleware, allow_origins=origins, allow_credentials=True
                    allow_headers=["Authorization", "Content-Type", "Idempotency-Key", "X-Portal-Token"])
 
 
+@app.middleware("http")
+async def add_security_headers(request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "SAMEORIGIN"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    return response
+
+
 def _client_dict(c: Client, db: Session) -> dict:
     return {"id": c.id, "name": c.name, "brand": c.brand, "industry": c.industry,
             "description": c.description, "memory_status": c.memory_status,
@@ -359,7 +368,12 @@ def download_asset(asset_id: int, db: Session = Depends(get_db), identity=Depend
     asset = db.scalar(select(Asset).where(Asset.id == asset_id, Asset.workspace_id == wid))
     if not asset or not Path(asset.storage_key).is_file():
         raise HTTPException(404, "Asset not found")
-    return FileResponse(asset.storage_key, filename=asset.filename, media_type=asset.content_type)
+    safe_filename = asset.filename.replace('"', '\\"')
+    headers = {
+        "Content-Disposition": f'attachment; filename="{safe_filename}"',
+        "X-Content-Type-Options": "nosniff",
+    }
+    return FileResponse(asset.storage_key, filename=asset.filename, media_type=asset.content_type, headers=headers)
 
 
 @app.post("/api/process-transcript", status_code=201)
@@ -407,6 +421,7 @@ async def process_transcript(data: ProcessInput, idempotency_key: str | None = H
         run.stage = "recalling"
         db.commit()
         query = "\n".join(i.description for i in extracted.requests) or "Client preferences, editing requirements, recurring revisions"
+        recall = []
         try:
             recall = await hindsight.recall(client.memory_bank_id, query)
             _remember_op(db, workspace_id=wid, client_id=client.id, project_id=project.id, run_id=run.id,
@@ -414,12 +429,11 @@ async def process_transcript(data: ProcessInput, idempotency_key: str | None = H
                          details=f"Retrieved {len(_memory_text(recall))} historical entries.")
             db.commit()
         except Exception as exc:
-            db.rollback()
+            recall = []
             _remember_op(db, workspace_id=wid, client_id=client.id, project_id=project.id, run_id=run.id,
-                         operation="recall", status="failed", key=f"{key}:recall",
-                         details=f"Hindsight recall failed: {type(exc).__name__}: {str(exc)[:500]}")
+                         operation="recall", status="degraded", key=f"{key}:recall",
+                         details=f"Hindsight recall degraded: {type(exc).__name__}: {str(exc)[:500]}")
             db.commit()
-            raise
         asset_rows = db.scalars(select(Asset).where(Asset.project_id == project.id)).all()
         uploaded_assets = [{"name": a.filename, "category": a.category, "status": "Present", "content_type": a.content_type} for a in asset_rows]
         requirements = [r.model_dump() for r in extracted.required_assets]

@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from ..config import settings
 from ..db import SessionLocal, get_db
-from ..models import ClientFeedback, Project, now_utc
+from ..models import ClientFeedback, ProcessingRun, ProductionTask, Project, Transcript, now_utc
 from ..schemas import ExtractionResult, InputModel
 from ..security import current_identity
 from ..services import groq
@@ -411,3 +411,92 @@ def deliver_feedback(
         item.status, item.stage, item.delivered_at = "delivered", "delivered", datetime.now(UTC)
         db.commit()
     return _view(item)
+
+
+@router.post("/agency/feedback/{feedback_id}/convert-task")
+def convert_feedback_to_task(
+    feedback_id: int, db: Session = Depends(get_db), identity=Depends(current_identity)
+):
+    _, workspace_id, _ = identity
+    feedback = db.scalar(
+        select(ClientFeedback).where(
+            ClientFeedback.id == feedback_id, ClientFeedback.workspace_id == workspace_id
+        )
+    )
+    if not feedback:
+        raise HTTPException(404, "Feedback not found")
+    if feedback.status != "delivered":
+        raise HTTPException(409, "Only delivered feedback can be converted to production tasks")
+
+    # Enforce idempotency: check if task already created from this feedback
+    existing_task = db.scalar(
+        select(ProductionTask).where(
+            ProductionTask.workspace_id == workspace_id,
+            ProductionTask.project_id == feedback.project_id,
+            ProductionTask.source == "client_feedback",
+            ProductionTask.evidence.like(f"%feedback_id:{feedback_id}%"),
+        )
+    )
+    if existing_task:
+        return {
+            "task_id": existing_task.id,
+            "title": existing_task.title,
+            "status": existing_task.status,
+            "already_converted": True,
+            "message": f"Task #{existing_task.id} already exists for this feedback.",
+        }
+
+    # Ensure a ProcessingRun exists to satisfy foreign key requirement
+    run = db.scalar(
+        select(ProcessingRun)
+        .where(ProcessingRun.project_id == feedback.project_id, ProcessingRun.workspace_id == workspace_id)
+        .order_by(ProcessingRun.created_at.desc())
+    )
+    feedback_content = feedback.original_text or feedback.transcript or feedback.summary or "Client revision"
+    if not run:
+        transcript = Transcript(
+            project_id=feedback.project_id,
+            content=feedback_content[:5000],
+            created_by=feedback.submitted_by,
+        )
+        db.add(transcript)
+        db.flush()
+        run = ProcessingRun(
+            workspace_id=workspace_id,
+            client_id=feedback.client_id,
+            project_id=feedback.project_id,
+            transcript_id=transcript.id,
+            idempotency_key=f"feedback-run:{feedback_id}",
+            status="completed",
+            stage="completed",
+        )
+        db.add(run)
+        db.flush()
+
+    task = ProductionTask(
+        workspace_id=workspace_id,
+        client_id=feedback.client_id,
+        project_id=feedback.project_id,
+        run_id=run.id,
+        title=f"Client Feedback Revision #{feedback.id}",
+        category="Editorial",
+        instruction=feedback_content,
+        resolve_workflow="Implement client requested revision in timeline and verify alignment with deliverable.",
+        priority="high",
+        source="client_feedback",
+        evidence=f"Client feedback_id:{feedback_id}; Content: {feedback_content[:200]}",
+        confidence=1.0,
+        requires_confirmation=False,
+        status="pending",
+    )
+    db.add(task)
+    db.commit()
+    db.refresh(task)
+
+    return {
+        "task_id": task.id,
+        "title": task.title,
+        "status": task.status,
+        "already_converted": False,
+        "message": f"Successfully converted feedback #{feedback_id} to Production Task #{task.id}.",
+    }

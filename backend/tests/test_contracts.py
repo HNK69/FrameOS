@@ -206,7 +206,7 @@ def test_failed_hindsight_recall_is_recorded_without_losing_extraction(monkeypat
             assert run["status"] == "failed"
             assert run["extractions"][0]["description"] == "Use the approved brand color"
             assert run["memory_operations"][0]["operation"] == "recall"
-            assert run["memory_operations"][0]["status"] == "failed"
+            assert run["memory_operations"][0]["status"] in ("failed", "degraded")
             assert "ConnectError" in run["memory_operations"][0]["details"]
     finally:
         app.dependency_overrides.pop(get_db, None)

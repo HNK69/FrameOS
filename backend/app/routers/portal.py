@@ -39,7 +39,7 @@ from ..security import (
     issue_client_token,
     verify_password,
 )
-from ..services import groq
+from ..services import groq, hindsight
 
 log = logging.getLogger('frameops')
 router = APIRouter(tags=['Client Portal'])
@@ -537,18 +537,36 @@ async def submit_portal_feedback(
     confirmed_items = [it for it in data.items if it.client_confirmed]
     for confirmed_item in confirmed_items:
         mem_key = f"portal-feedback:{uuid4().hex[:12]}"
-        _remember_op(
+        op = _remember_op(
             db,
             workspace_id=wid,
             client_id=client.id,
             project_id=project.id,
             run_id=None,
             operation="retain",
-            status="completed",
+            status="pending",
             key=mem_key,
             details=f"Client confirmed preference: {confirmed_item.description}",
             provenance="client_confirmed",
         )
+        db.commit()
+        if client.memory_bank_id and hindsight.configured():
+            try:
+                result, verified = await hindsight.retain_and_verify(
+                    client.memory_bank_id,
+                    confirmed_item.description,
+                    f"FRAMEOPS client-confirmed feedback; workspace={wid}; client={client.id}; project={project.id}; feedback_submission={submission.id}",
+                    ["frameops", "client_confirmed", "portal_feedback"],
+                    f"portal-retain-{wid}-{client.id}-{mem_key[:40]}",
+                )
+                op.status = "completed" if verified else "failed"
+                op.details = f"Client confirmed preference: {confirmed_item.description} (Hindsight verified: {verified})"
+            except Exception as exc:
+                op.status = "failed"
+                op.details = f"Client confirmed preference retain failed: {type(exc).__name__}: {str(exc)[:200]}"
+        else:
+            op.status = "completed"
+        db.commit()
 
     db.commit()
     db.refresh(submission)

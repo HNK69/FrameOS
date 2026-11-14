@@ -39,6 +39,7 @@ import {
   Zap,
 } from "lucide-react";
 import { api, json } from "@/lib/api";
+import { restoreProductionProject } from "../lib/production-history.mjs";
 import { AssetIntelligencePanel } from "./asset-intelligence-panel";
 import { Task, TaskEditModal } from "./task-edit-modal";
 import { TaskAuditDrawer } from "./task-audit-drawer";
@@ -77,6 +78,8 @@ export function ProductionWorkspace({
   const [transcript, setTranscript] = useState("");
   const [run, setRun] = useState<any>(null);
   const [ingestBusy, setIngestBusy] = useState(false);
+  const [deliveredFeedbacks, setDeliveredFeedbacks] = useState<any[]>([]);
+  const [convertingId, setConvertingId] = useState<number | null>(null);
 
   // Adaptive Memory state
   const [adaptiveData, setAdaptiveData] = useState<any>(null);
@@ -136,9 +139,47 @@ export function ProductionWorkspace({
       .finally(() => setLoadingTasks(false));
   };
 
+  const loadDeliveredFeedback = () => {
+    if (!projectId) {
+      setDeliveredFeedbacks([]);
+      return;
+    }
+    api<any[]>(`/api/agency/feedback?project_id=${projectId}&status=delivered`)
+      .then((data) => setDeliveredFeedbacks(data))
+      .catch(() => setDeliveredFeedbacks([]));
+  };
+
   useEffect(() => {
     loadTasks();
-  }, [projectId]);
+    loadDeliveredFeedback();
+    if (projectId) {
+      api<any>(`/api/projects/${projectId}`)
+        .then((projectData) => {
+          const restored = restoreProductionProject(projectData);
+          setRun(restored.run);
+        })
+        .catch(() => {
+          setRun(null);
+        });
+    } else {
+      setRun(null);
+    }
+  }, [projectId, refresh]);
+
+  async function handleConvertToTask(feedbackId: number) {
+    setConvertingId(feedbackId);
+    try {
+      const res = await api<any>(`/api/agency/feedback/${feedbackId}/convert-task`, json("POST", {}));
+      notify(res.message);
+      loadTasks();
+      loadDeliveredFeedback();
+      refresh();
+    } catch (err: any) {
+      notify(err.message || "Failed to convert feedback to task");
+    } finally {
+      setConvertingId(null);
+    }
+  }
 
   // Load adaptive knowledge when memory view is opened
   useEffect(() => {
@@ -394,6 +435,39 @@ export function ProductionWorkspace({
               </div>
             </div>
           </div>
+
+          {/* Delivered Client Feedback Conversion Banner */}
+          {deliveredFeedbacks.length > 0 && (
+            <div className="panel delivered-feedback-box" style={{ marginBottom: 16, borderLeft: "3px solid #a45aff", background: "rgba(164, 90, 255, 0.05)", padding: "14px 18px", borderRadius: 10 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <Sparkles size={16} color="#c084fc" />
+                  <h4 style={{ margin: 0, fontSize: 13, fontWeight: 600, color: "#f3e8ff" }}>
+                    Delivered Client Feedback ({deliveredFeedbacks.length})
+                  </h4>
+                </div>
+                <small style={{ color: "#9ca3af", fontSize: 11 }}>Review delivered items to convert into production tasks</small>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {deliveredFeedbacks.map((fb) => (
+                  <div key={fb.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "rgba(0,0,0,0.3)", padding: "10px 14px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.08)" }}>
+                    <div style={{ flex: 1, marginRight: 16 }}>
+                      <b style={{ fontSize: 12, display: "block", color: "#e5e7eb" }}>{fb.title || "Client Review Feedback"}</b>
+                      <p style={{ margin: "4px 0 0", fontSize: 11, color: "#9ca3af", lineHeight: 1.4 }}>{fb.content}</p>
+                    </div>
+                    <button
+                      className="primary-button"
+                      disabled={convertingId === fb.id}
+                      onClick={() => handleConvertToTask(fb.id)}
+                      style={{ padding: "6px 14px", fontSize: 11, whiteSpace: "nowrap" }}
+                    >
+                      {convertingId === fb.id ? "Converting…" : "Convert to Production Task"}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Tasks Grid / List */}
           {loadingTasks ? (
