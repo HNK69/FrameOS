@@ -1,6 +1,6 @@
 # FRAMEOPS TODO
 
-## Completed in this Handover & Audit
+## Completed in Handover & Milestones 1–6
 
 - [x] Complete GitHub repository and branch audit (`HNK69/FrameOS`, PR #1, PR #2, branch `Deekshith`).
 - [x] Integrate verified PR #1 (`feature/feedback-intelligence`) into `main`.
@@ -8,21 +8,22 @@
 - [x] Integrate verified PR #2 (`feature/production-intelligence`) into `main` and resolve UI/router conflicts.
 - [x] Resolve Alembic multi-head conflict between PR #1 and branch `Deekshith`; linearize migration chain.
 - [x] Package unmerged branch `Deekshith` into clean, modularized PR branch `feature/client-portal` with dedicated router `backend/app/routers/portal.py` and unit tests in `test_portal.py`.
-- [x] Verify live Hindsight Cloud bank creation, preference retention, semantic recall, and bank deletion.
-- [x] Verify live Groq API extraction and add exponential backoff retry for HTTP 429 rate limits.
-- [x] Resolve OpenClaw payload extraction bug in `_extract_text` to prevent capturing metadata `runId`.
-- [x] Calibrate OpenClaw synthesis prompt to fit the 512-token max output limit alongside `openai/gpt-oss-120b` reasoning tokens.
-- [x] Verify all automated test suites: 24 backend tests on `main`, 27 backend tests on `feature/client-portal`, and clean Next.js production builds.
+- [x] **Milestone 1**: Database & concurrency hardening (enable SQLite WAL mode, busy timeout 5000ms, linear migration to `a1b2c3d4e5f6`, 144 operational rows preserved, safe backups verified).
+- [x] **Milestone 2**: Security & authentication remediation (eliminate passwordless email login bypass, Argon2 passcode verification, unexpired token enforcement, HTTP security headers, CORS `X-Portal-Token`, safe attachment downloads, 5 automated security tests).
+- [x] **Milestone 3**: AI pipeline resiliency & memory sync (Groq Whisper 429 exponential backoff, sliding-window chunking >4,000 tokens, Hindsight graceful degradation fallback to empty memories, client-confirmed preference memory sync).
+- [x] **Milestone 4**: Client review portal full-stack integration (284 lines ported `.portal-*` CSS, portal navigation links in `app-shell.tsx`, dynamic Next.js API `rewrites()` and port 8001 fallbacks, 8 routes compiled).
+- [x] **Milestone 5**: Feedback-to-production workflow (`POST /api/agency/feedback/{id}/convert-task` with `source="client_feedback"` and query-based idempotency, `ProductionWorkspace` hydration bug fix on revisit).
+- [x] **Milestone 6**: QA, multi-tier verification & Checkpoint 2 pre-push protocol (35 backend tests passing, 2 frontend unit tests passing, Next.js build clean across 8 routes, live provider connectivity verified, 0 remote divergence, all branches preserved intact).
 - [x] Update `README.md`, `ARCHITECTURE.md`, `PROJECT_STATUS.md`, and `TODO.md`.
 
-## Immediate Next Steps (Demonstration Readiness)
+## Immediate Next Steps (Pending User Push Authorization - Checkpoint 2)
 
-- [ ] Submit PR on GitHub for branch `feature/client-portal` (`HNK69/FrameOS`) for teammate review.
-- [ ] Merge `feature/client-portal` into `main` once peer review is approved.
-- [ ] Upgrade Groq API tier or configure a non-reasoning extraction model if higher TPM is required for multi-task bulk processing.
+- [ ] Obtain explicit user approval to execute `git push origin main`.
+- [ ] Push `main` to `origin/main` and verify synchronized commit hashes.
+- [ ] Verify PR #1 and PR #2 merge status on GitHub.
 - [ ] Seed interactive demo data (e.g. LUXE STUDIO vs. FITCORE) for client demonstration walkthrough.
 
-## Production Hardening
+## Production Hardening (Future Roadmap)
 
 - [ ] Implement team member invitations and owner/admin/editor/viewer RBAC matrix.
 - [ ] Add Redis-backed rate limiting and CSRF protection for cookie-authenticated mutation endpoints.
