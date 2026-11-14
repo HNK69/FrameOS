@@ -388,7 +388,15 @@ async def process_transcript(data: ProcessInput, idempotency_key: str | None = H
     try:
         extracted = await groq.extract_feedback(data.transcript.strip())
         for item in extracted.requests:
-            db.add(ExtractedItem(run_id=run.id, **item.model_dump()))
+            db.add(ExtractedItem(
+                run_id=run.id,
+                description=item.description,
+                category=item.category,
+                source_quote=item.source_quote,
+                classification=item.classification,
+                confidence=item.confidence,
+                requires_confirmation=item.requires_confirmation,
+            ))
         db.commit()
         run.stage = "recalling"
         db.commit()
