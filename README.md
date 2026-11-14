@@ -70,10 +70,20 @@ The OpenClaw CLI process uses `OPENCLAW_GATEWAY_URL` and `OPENCLAW_GATEWAY_TOKEN
 - Initial owner/session: `GET /api/auth/status`, `POST /api/auth/setup`, `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/me`
 - Clients/projects: `GET|POST /api/clients`, `GET|PATCH|DELETE /api/clients/{id}`, `GET|POST /api/projects`, `GET|PATCH|DELETE /api/projects/{id}`
 - Production: `POST /api/process-transcript`, `GET /api/runs/{id}`, `GET /api/tasks`, `POST /api/tasks/{id}/feedback`
+- Client feedback: `POST /api/feedback`, `POST /api/feedback/audio`, `GET /api/feedback/{id}`, `PATCH /api/feedback/{id}/confirmation`, `POST /api/feedback/{id}/retry`, `GET /api/agency/feedback`, `POST /api/agency/feedback/{id}/deliver` (see [feedback API contract](backend/FEEDBACK_API.md))
 - Memory: `GET /api/clients/{id}/memories`, `POST /api/memory/retain`, `POST /api/memory/recall`, `POST /api/memory/reflect`
 - Assets and analytics: `POST /api/projects/{id}/assets`, `GET /api/assets/{id}/download`, `GET /api/analytics`
 
 Protected endpoints accept the HttpOnly `frameops_session` cookie. A bearer token remains supported for local API clients. Project/client selection is checked against the authenticated workspace on the backend.
+
+Text feedback example (submit with a stable unique `Idempotency-Key`, then poll the returned id):
+
+```sh
+curl -X POST http://localhost:8000/api/feedback \
+  -H 'Content-Type: application/json' -H 'Idempotency-Key: portal-123' \
+  -b cookies.txt -d '{"project_id":12,"text":"Please shorten the opening and keep the approved blue brand color."}'
+curl http://localhost:8000/api/feedback/1 -b cookies.txt
+```
 
 ## Testing
 

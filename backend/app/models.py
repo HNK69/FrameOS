@@ -150,6 +150,37 @@ class Feedback(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
 
 
+class ClientFeedback(Base):
+    """Portal submission and its review/processing provenance; separate from task feedback."""
+    __tablename__ = "client_feedback"
+    __table_args__ = (UniqueConstraint("workspace_id", "idempotency_key"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    workspace_id: Mapped[int] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"), index=True)
+    client_id: Mapped[int] = mapped_column(ForeignKey("clients.id", ondelete="CASCADE"), index=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), index=True)
+    submitted_by: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    idempotency_key: Mapped[str] = mapped_column(String(120))
+    source_type: Mapped[str] = mapped_column(String(16))
+    original_text: Mapped[str] = mapped_column(Text, default="")
+    audio_path: Mapped[str] = mapped_column(String(600), default="")
+    audio_filename: Mapped[str] = mapped_column(String(255), default="")
+    audio_content_type: Mapped[str] = mapped_column(String(120), default="")
+    transcript: Mapped[str] = mapped_column(Text, default="")
+    transcript_provider: Mapped[str] = mapped_column(String(80), default="")
+    transcript_model: Mapped[str] = mapped_column(String(120), default="")
+    transcript_created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    extracted_json: Mapped[str] = mapped_column(Text, default="{}")
+    summary: Mapped[str] = mapped_column(Text, default="")
+    status: Mapped[str] = mapped_column(String(24), default="queued", index=True)
+    stage: Mapped[str] = mapped_column(String(40), default="queued")
+    error: Mapped[str] = mapped_column(Text, default="")
+    attempt_count: Mapped[int] = mapped_column(Integer, default=0)
+    client_confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
+
+
 class MemoryOperation(Base):
     __tablename__ = "memory_operations"
     id: Mapped[int] = mapped_column(primary_key=True)
