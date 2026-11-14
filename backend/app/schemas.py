@@ -88,3 +88,58 @@ class TaskDraft(BaseModel):
 
 class SynthesisResult(BaseModel):
     tasks: list[TaskDraft]
+
+
+class PortalLoginInput(InputModel):
+    token: str | None = None
+    code: str | None = None
+    email: EmailStr | None = None
+
+
+class PortalDraftInput(InputModel):
+    feedback_type: str = Field(default="text", pattern="^(brief|text|voice|review_notes)$")
+    content: str = Field(min_length=3, max_length=100_000)
+
+
+class PortalFeedbackItem(BaseModel):
+    id: str | None = None
+    description: str = Field(min_length=1, max_length=2000)
+    category: str = Field(default="General", max_length=64)
+    classification: str = Field(default="explicit", pattern="^(explicit|inferred)$")
+    confidence: float = Field(default=1.0, ge=0, le=1)
+    requires_confirmation: bool = False
+    client_confirmed: bool = False
+    actionable_cut_note: str = ""
+
+
+class PortalFeedbackDraftResult(BaseModel):
+    summary: str = ""
+    requests: list[PortalFeedbackItem] = []
+    ambiguities: list[str] = []
+    missing_information: list[str] = []
+    production_risks: list[str] = []
+
+
+class PortalFeedbackSubmitInput(InputModel):
+    feedback_type: str = Field(pattern="^(brief|text|voice|review_decision)$")
+    content: str = Field(default="", max_length=100_000)
+    version_id: int | None = None
+    items: list[PortalFeedbackItem] = []
+    audio_asset_id: int | None = None
+    author_name: str = Field(default="Client", max_length=160)
+
+
+class PortalDecisionInput(InputModel):
+    decision: str = Field(pattern="^(approve|changes_requested|reject)$")
+    version_id: int | None = None
+    notes: str = Field(default="", max_length=10_000)
+    author_name: str = Field(default="Client", max_length=160)
+
+
+class PortalCommentInput(InputModel):
+    timestamp_seconds: float = Field(ge=0)
+    timecode: str = Field(min_length=1, max_length=16)
+    content: str = Field(min_length=1, max_length=5000)
+    version_id: int | None = None
+    author_name: str = Field(default="Client", max_length=120)
+

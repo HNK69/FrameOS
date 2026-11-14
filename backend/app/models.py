@@ -163,3 +163,62 @@ class MemoryOperation(Base):
     provenance: Mapped[str] = mapped_column(String(32), default="")
     details: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+
+
+class ClientPortalAccess(Base):
+    __tablename__ = "client_portal_access"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    workspace_id: Mapped[int] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"), index=True)
+    client_id: Mapped[int] = mapped_column(ForeignKey("clients.id", ondelete="CASCADE"), index=True, unique=True)
+    access_token: Mapped[str] = mapped_column(String(128), unique=True, index=True)
+    passcode: Mapped[str] = mapped_column(String(64), index=True)
+    client_email: Mapped[str] = mapped_column(String(320), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+    last_accessed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    client: Mapped[Client] = relationship()
+
+
+class ReviewVersion(Base):
+    __tablename__ = "review_versions"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    workspace_id: Mapped[int] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"), index=True)
+    client_id: Mapped[int] = mapped_column(ForeignKey("clients.id", ondelete="CASCADE"), index=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), index=True)
+    version_label: Mapped[str] = mapped_column(String(32), default="v1")
+    video_asset_id: Mapped[int | None] = mapped_column(ForeignKey("assets.id", ondelete="SET NULL"), nullable=True)
+    video_url: Mapped[str] = mapped_column(String(500), default="")
+    status: Mapped[str] = mapped_column(String(32), default="in_review")
+    change_summary: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+
+
+class VideoComment(Base):
+    __tablename__ = "video_comments"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    workspace_id: Mapped[int] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"), index=True)
+    client_id: Mapped[int] = mapped_column(ForeignKey("clients.id", ondelete="CASCADE"), index=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), index=True)
+    review_version_id: Mapped[int | None] = mapped_column(ForeignKey("review_versions.id", ondelete="SET NULL"), nullable=True)
+    timestamp_seconds: Mapped[float] = mapped_column(Float, default=0.0)
+    timecode: Mapped[str] = mapped_column(String(16), default="00:00")
+    author_name: Mapped[str] = mapped_column(String(120), default="Client")
+    content: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(32), default="submitted")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+
+
+class ClientFeedbackSubmission(Base):
+    __tablename__ = "client_feedback_submissions"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    workspace_id: Mapped[int] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"), index=True)
+    client_id: Mapped[int] = mapped_column(ForeignKey("clients.id", ondelete="CASCADE"), index=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), index=True)
+    review_version_id: Mapped[int | None] = mapped_column(ForeignKey("review_versions.id", ondelete="SET NULL"), nullable=True)
+    feedback_type: Mapped[str] = mapped_column(String(32))
+    author_name: Mapped[str] = mapped_column(String(160), default="Client")
+    content: Mapped[str] = mapped_column(Text)
+    structured_data: Mapped[str] = mapped_column(Text, default="{}")
+    audio_asset_id: Mapped[int | None] = mapped_column(ForeignKey("assets.id", ondelete="SET NULL"), nullable=True)
+    status: Mapped[str] = mapped_column(String(32), default="submitted")
+    review_decision: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
