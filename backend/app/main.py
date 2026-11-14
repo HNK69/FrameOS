@@ -284,7 +284,8 @@ def create_project(data: ProjectInput, db: Session = Depends(get_db), identity=D
 def get_project(project_id: int, db: Session = Depends(get_db), identity=Depends(current_identity)):
     _, wid, _ = identity
     project = _get_project(db, project_id, wid)
-    runs = db.scalars(select(ProcessingRun).where(ProcessingRun.project_id == project.id).order_by(ProcessingRun.created_at.desc())).all()
+    runs = db.scalars(select(ProcessingRun).where(ProcessingRun.project_id == project.id)
+                      .order_by(ProcessingRun.created_at.desc(), ProcessingRun.id.desc())).all()
     return {**_project_dict(project), "runs": [run_dict(db, r) for r in runs],
             "assets": [asset_dict(a) for a in db.scalars(select(Asset).where(Asset.project_id == project.id)).all()]}
 
@@ -390,11 +391,19 @@ async def process_transcript(data: ProcessInput, idempotency_key: str | None = H
         run.stage = "recalling"
         db.commit()
         query = "\n".join(i.description for i in extracted.requests) or "Client preferences, editing requirements, recurring revisions"
-        recall = await hindsight.recall(client.memory_bank_id, query)
-        _remember_op(db, workspace_id=wid, client_id=client.id, project_id=project.id, run_id=run.id,
-                     operation="recall", status="completed", key=f"{key}:recall",
-                     details=f"Retrieved {len(_memory_text(recall))} historical entries.")
-        db.commit()
+        try:
+            recall = await hindsight.recall(client.memory_bank_id, query)
+            _remember_op(db, workspace_id=wid, client_id=client.id, project_id=project.id, run_id=run.id,
+                         operation="recall", status="completed", key=f"{key}:recall",
+                         details=f"Retrieved {len(_memory_text(recall))} historical entries.")
+            db.commit()
+        except Exception as exc:
+            db.rollback()
+            _remember_op(db, workspace_id=wid, client_id=client.id, project_id=project.id, run_id=run.id,
+                         operation="recall", status="failed", key=f"{key}:recall",
+                         details=f"Hindsight recall failed: {type(exc).__name__}: {str(exc)[:500]}")
+            db.commit()
+            raise
         asset_rows = db.scalars(select(Asset).where(Asset.project_id == project.id)).all()
         uploaded_assets = [{"name": a.filename, "category": a.category, "status": "Present", "content_type": a.content_type} for a in asset_rows]
         requirements = [r.model_dump() for r in extracted.required_assets]
@@ -425,7 +434,7 @@ async def process_transcript(data: ProcessInput, idempotency_key: str | None = H
         run = db.get(ProcessingRun, run.id)
         run.status = "failed"
         run.stage = "failed"
-        run.error = str(exc)[:1200]
+        run.error = str(exc).strip()[:1200] or type(exc).__name__
         run.completed_at = now_utc()
         db.commit()
         if isinstance(exc, groq.ServiceUnavailable):
@@ -472,7 +481,10 @@ async def list_memories(client_id: int, db: Session = Depends(get_db), identity=
     client = _get_client(db, client_id, wid)
     if not hindsight.configured():
         raise HTTPException(503, "Hindsight is not configured")
-    result = await hindsight.call_memory("GET", client.memory_bank_id, "list", {})
+    try:
+        result = await hindsight.call_memory("GET", client.memory_bank_id, "list", {})
+    except groq.ServiceUnavailable as exc:
+        raise HTTPException(503, str(exc)) from exc
     return {"client_id": client_id, "memories": _memory_text(result)}
 
 
@@ -480,7 +492,10 @@ async def list_memories(client_id: int, db: Session = Depends(get_db), identity=
 async def memory_recall(client_id: int, query: str, db: Session = Depends(get_db), identity=Depends(current_identity)):
     _, wid, _ = identity
     client = _get_client(db, client_id, wid)
-    return await hindsight.recall(client.memory_bank_id, query)
+    try:
+        return await hindsight.recall(client.memory_bank_id, query)
+    except groq.ServiceUnavailable as exc:
+        raise HTTPException(503, str(exc)) from exc
 
 
 @app.post("/api/memory/retain")
@@ -535,7 +550,10 @@ async def memory_retain(data: RetainInput, idempotency_key: str | None = Header(
 async def memory_reflect(client_id: int, query: str, db: Session = Depends(get_db), identity=Depends(current_identity)):
     _, wid, _ = identity
     client = _get_client(db, client_id, wid)
-    return await hindsight.reflect(client.memory_bank_id, query)
+    try:
+        return await hindsight.reflect(client.memory_bank_id, query)
+    except groq.ServiceUnavailable as exc:
+        raise HTTPException(503, str(exc)) from exc
 
 
 @app.post("/api/tasks/{task_id}/feedback")

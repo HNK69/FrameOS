@@ -10,11 +10,14 @@
 
 - [x] Verify Windows asyncio subprocess handling, timeout, output capture, and existing Gateway URL/token forwarding.
 - [x] Install and verify portable Node.js 24.22.1 and OpenClaw CLI 2026.11.3 for the backend.
-- [x] Verify configured Groq and Hindsight connectivity from the backend runtime.
-- [x] Verify real Groq extraction, Hindsight bank initialization, retain and recall through a loopback Uvicorn run with an isolated database.
+- [x] Prior isolated integration run verified Groq and Hindsight connectivity and real extraction/retain/recall through loopback Uvicorn; the current audit found Hindsight list/recall unavailable and its current bank contents unverified.
 - [ ] Complete a real OpenClaw synthesis and verify production task rows; latest run failed at the provider's 8K TPM limit before task insertion.
 - [ ] Run the two-client same-transcript/correction/isolation scenario after synthesis is unblocked.
 - [ ] Capture a 1440x900 screenshot and compare with the supplied reference; Playwright visual run remains outstanding.
+- [ ] Restore Hindsight connectivity from the backend runtime, then verify current client-bank list/recall and a confirmed preference retain/recall. The persistence audit found no local retain rows; list calls return ConnectError on port 8000 and upstream HTTP 400 on port 8001.
+- [x] Restore persisted production run/asset state when revisiting or refreshing the production page.
+- [x] Preserve extraction rows on failed synthesis; return failed Hindsight recall as an auditable memory operation.
+- [x] Return honest HTTP 503 responses for memory API provider connectivity failures.
 
 ## Production hardening
 

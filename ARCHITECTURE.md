@@ -24,10 +24,10 @@ Each client record has a persisted, application-generated `memory_bank_id`. The 
 
 1. Persist the transcript and a processing run with an idempotency key.
 2. Call Groq with transcript text JSON-encoded as untrusted data; validate JSON against Pydantic models.
-3. Recall the correct client bank using the extracted feedback as the query; persist the retrieval operation.
+3. Recall the correct client bank using the extracted feedback as the query; persist successful and failed retrieval operations with status and error details.
 4. Compare extracted required assets with actual project uploads. Absence alone yields `Unknown`; no unverified asset is presented as present.
 5. Call the configured `frameops-synth` OpenClaw Gateway agent with compact extracted requirements, up to four ranked Hindsight facts (source/provenance/confirmation/confidence), and actual asset availability. The agent uses a 512-token output cap and a minimal tool profile.
-6. Validate synthesized tasks, force confirmation where confidence is below the application threshold, and persist the result. Any provider error leaves a failed processing run and no fabricated tasks.
+6. Validate synthesized tasks, force confirmation where confidence is below the application threshold, and persist the result. Extracted requirements are committed before recall/synthesis, so provider errors leave the run and its available extractions intact without fabricated tasks. Production history hydrates persisted runs on revisit/refresh.
 
 ## Feedback and provenance
 

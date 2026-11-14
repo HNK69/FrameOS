@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
+import { restoreProductionProject } from "../lib/production-history.mjs";
 import { Activity, ArrowDownRight, ArrowRight, AudioLines, Bell, BrainCircuit, Check, CheckCircle2, ChevronDown, CircleHelp, Clock3, FileAudio2, FileText, FolderKanban, LayoutDashboard, LockKeyhole, LogOut, MoreHorizontal, Plus, Radio, Search, ShieldCheck, Sparkles, Upload, UsersRound, WandSparkles, X, Zap } from "lucide-react";
 import { api, json } from "@/lib/api";
 
@@ -57,7 +58,7 @@ export function AppShell({page}:{page:Page}) {
         {page==="overview"&&<Overview clients={clients} projects={projects} tasks={tasks} analytics={analytics} readiness={readiness}/>}
         {page==="clients"&&<Clients clients={clients} refresh={()=>setRefresh(x=>x+1)} notify={setNotice}/>}
         {page==="projects"&&<Projects clients={clients} projects={projects} refresh={()=>setRefresh(x=>x+1)} notify={setNotice}/>}
-        {page==="production"&&<Production clients={clients} projects={projects} refresh={()=>setRefresh(x=>x+1)} notify={setNotice}/>}
+        {page==="production"&&<Production clients={clients} projects={projects} refresh={()=>setRefresh(x=>x+1)} refreshVersion={refresh} notify={setNotice}/>}
         <footer className="app-footer"><span>FRAMEOPS <i>·</i> Remember Every Client. Perfect Every Project.</span><span>Data shown from this workspace</span></footer>
       </main></div></div>
 }
@@ -110,7 +111,7 @@ function Projects({clients,projects,refresh,notify}:{clients:Client[];projects:P
     {shown.length?<div className="table-wrap"><div className="table-header project-list-header"><span>Project</span><span>Client</span><span>Status</span><span>Due date</span><span>Actions</span></div>{shown.map(p=><div className="table-row project-list-row" key={p.id}><div><b>{p.name}</b><small>{p.description||"Creative production"}</small></div><span>{p.client_name}</span><span><i className={`status-dot ${p.status}`}/>{p.status}</span><span>{p.due_date?new Date(p.due_date).toLocaleDateString():"—"}</span><div className="row-controls"><select value={p.status} onChange={e=>setStatus(p,e.target.value)} aria-label={`Set ${p.name} status`}><option value="active">Active</option><option value="completed">Completed</option><option value="archived">Archived</option></select><Link className="row-link" href={`/production?project=${p.id}`} title="Open production"><ArrowRight size={15}/></Link><button className="row-link" onClick={()=>remove(p)} title="Delete project"><X size={14}/></button></div></div>)}</div>:<Empty title={clients.length?"No projects in this view":"Create a client first"} body={clients.length?"Add a project to connect feedback, assets, and production tasks.":"A project must be associated with a workspace client."} action={clients.length?<button className="small-action" onClick={()=>setOpen(true)}>Create project <ArrowRight size={13}/></button>:<Link className="small-action" href="/clients">Add a client <ArrowRight size={13}/></Link>}/>}</section>
 }
 
-function Production({clients,projects,refresh,notify}:{clients:Client[];projects:Project[];refresh:()=>void;notify:(x:string)=>void}){
+function Production({clients,projects,refresh,refreshVersion,notify}:{clients:Client[];projects:Project[];refresh:()=>void;refreshVersion:number;notify:(x:string)=>void}){
   const params=typeof window!=="undefined"?new URLSearchParams(window.location.search):null;
   const [clientId,setClientId]=useState<number>(Number(params?.get("client")||0));const [projectId,setProjectId]=useState<number>(Number(params?.get("project")||0));
   const [transcript,setTranscript]=useState("");const [run,setRun]=useState<Run|null>(null);const [busy,setBusy]=useState(false);const [assets,setAssets]=useState<any[]>([]);const [uploadCategory,setUploadCategory]=useState("reference");
@@ -118,7 +119,7 @@ function Production({clients,projects,refresh,notify}:{clients:Client[];projects
   useEffect(()=>{if(!projects.length)return;const wanted=Number(new URLSearchParams(window.location.search).get("project")||0);const target=projects.find(p=>p.id===wanted);if(target){setClientId(target.client_id);setProjectId(target.id)}},[projects]);
   useEffect(()=>{if(clients.length&&!clientId)setClientId(clients[0].id)},[clients]);
   useEffect(()=>{const matching=projects.filter(p=>p.client_id===clientId);if(matching.length&&!matching.some(p=>p.id===projectId))setProjectId(matching[0].id);else if(!matching.length)setProjectId(0)},[clientId,projects]);
-  useEffect(()=>{if(!projectId)return;api<any>(`/api/projects/${projectId}`).then(v=>setAssets(v.assets||[])).catch(()=>setAssets([]))},[projectId]);
+  useEffect(()=>{if(!projectId){setAssets([]);setRun(null);return}let active=true;api<any>(`/api/projects/${projectId}`).then(v=>{if(!active)return;const restored=restoreProductionProject<Run,any>(v);setAssets(restored.assets);setRun(restored.run)}).catch(()=>{if(active){setAssets([]);setRun(null)}});return()=>{active=false}},[projectId,refreshVersion]);
   async function process(e:React.FormEvent){e.preventDefault();if(!projectId)return;setBusy(true);setRun(null);try{const result=await api<Run>("/api/process-transcript",{...json("POST",{project_id:projectId,transcript}),headers:{"Idempotency-Key":crypto.randomUUID()}});setRun(result);refresh()}catch(e:any){notify(e.message);try{const p=await api<any>(`/api/projects/${projectId}`);const failed=p.runs?.[0];if(failed)setRun(failed)}catch{}}finally{setBusy(false)}}
   async function upload(e:React.ChangeEvent<HTMLInputElement>){const file=e.target.files?.[0];if(!file||!projectId)return;const form=new FormData();form.append("file",file);try{const result=await api<any>(`/api/projects/${projectId}/assets?category=${encodeURIComponent(uploadCategory)}`,{method:"POST",body:form});setAssets(v=>[...v,result]);notify("Asset uploaded and linked to this project.")}catch(e:any){notify(e.message)}e.target.value=""}
   async function rate(task:Task,action:"accept"|"correct"|"reject"){let correction="";if(action==="correct"){correction=prompt("Enter the corrected instruction to retain with editor provenance:",task.instruction)||"";if(!correction.trim())return}const clientConfirmed=action==="accept"||action==="correct"?confirm("Was this preference explicitly confirmed by the client? Choose Cancel if it was not."):false;try{const result=await api<any>(`/api/tasks/${task.id}/feedback`,json("POST",{action,correction,client_confirmed:clientConfirmed}));notify(result.message);if(run)setRun({...run,tasks:run.tasks.map(t=>t.id===task.id?{...t,status:result.task_status}:t)});refresh()}catch(e:any){notify(e.message)}}
