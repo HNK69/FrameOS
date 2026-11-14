@@ -96,7 +96,7 @@ cd ..\frontend
 npm run build
 ```
 
-The automated suite has 19 tests, including production task lifecycle, provenance preservation, asset evidence verification, operational analytics, Windows selector-loop subprocess execution and timeout behavior, Gateway environment forwarding, and isolated API/auth contracts. These tests do not mock their way into claiming external-provider integration.
+The automated suite on `main` has 24 tests, including production task lifecycle, provenance preservation, asset evidence verification, operational analytics, feedback submission, audio extraction, Windows selector-loop subprocess execution and timeout behavior, Gateway environment forwarding, and isolated API/auth contracts. On the prepared `feature/client-portal` branch, 27 backend tests and 8 frontend routes pass. These tests do not mock their way into claiming external-provider integration.
 
 To exercise the real configured providers, run `python scripts/live_workflow.py` from `backend`. It starts Uvicorn on loopback port 8000 with an isolated SQLite database, creates a temporary client and Hindsight bank through the API, runs extraction/recall/retain/synthesis, verifies task persistence, and attempts remote bank cleanup. It aborts if port 8000 is occupied. A failed run leaves its local verification database/log for diagnosis.
 

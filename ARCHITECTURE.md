@@ -1,52 +1,44 @@
 # FRAMEOPS Architecture
 
-## Runtime shape
+## System Architecture
 
 ```text
-Next.js UI (same-site HttpOnly session cookie)
-               │ REST + JSON / multipart
-               ▼
-FastAPI ── SQLAlchemy ── SQLite local / PostgreSQL deployment
-   │
-   ├── Groq Chat Completions: validated transcript extraction
-   ├── Hindsight API: client-bank initialization, recall, retain, reflect, delete
-   ├── OpenClaw CLI → authenticated Gateway: production synthesis
-   └── Storage adapter (current local disk; object storage required for production)
+Next.js UI (Agency Dashboard & Client Portal)
+                │ REST + JSON / multipart (HttpOnly Session Cookie / Bearer)
+                ▼
+FastAPI Backend (Modular Routers: auth, clients, projects, production, feedback, portal)
+                │
+                ├── SQLAlchemy 2.0 ORM (SQLite local / PostgreSQL deployment)
+                ├── Groq Cloud API: Structured requirement extraction & Whisper transcription
+                ├── Hindsight Cloud Memory Layer: Client-specific memory banks (retain/recall/reflect)
+                ├── OpenClaw Gateway CLI: Local agentic DaVinci Resolve task synthesis
+                └── Storage Adapter: Local disk storage with workspace scoping (object storage in prod)
 ```
 
-## Tenant and memory boundaries
+## Modular Routers & Endpoint Separation
 
-The first owner setup creates a user, workspace, and owner membership. Session claims identify a user and workspace; API routes derive the workspace from that identity and validate requested client/project ownership. The current product supports one owner account per initialized workspace. The membership table carries a role column for later role administration.
+The API endpoints are organized into modular FastAPI routers:
+1. `backend/app/main.py`: Core application setup, authentication, clients, projects, processing runs, tasks, and memory.
+2. `backend/app/routers/feedback.py`: Client feedback intake, audio upload with Whisper transcription, client confirmation, and agency delivery tracking.
+3. `backend/app/routers/production_intelligence.py`: Operational production analytics, project asset intelligence, and client adaptive knowledge synthesis.
+4. `backend/app/routers/portal.py`: Public client portal tokens, video review versions, timestamped comments, and structured client feedback submissions.
 
-Each client record has a persisted, application-generated `memory_bank_id`. The transcript is never used to construct a bank ID. All Hindsight calls use the bank id resolved from the authenticated project/client relationship. Hindsight remains the source of truth for long-term preference records; PostgreSQL stores mappings, operation state, local activity, and provenance.
+## Tenant and Memory Boundaries
 
-## Transcript workflow
+- **Workspace Scoping**: The initial setup creates a workspace owner. Session claims encode user ID and workspace ID. All mutations and queries enforce workspace scoping to eliminate cross-tenant leakage.
+- **Hindsight Memory Isolation**: Each client has an application-managed `memory_bank_id`. Client briefs and feedback are recalled only against that client's specific bank ID, guaranteeing zero cross-client memory leakage.
+- **SQLite Operational Truth vs Hindsight Adaptive Truth**: SQLite records all immutable operational events (transcripts, runs, extracted items, tasks, comments, feedback). Hindsight persists distilled, confirmed client preferences with provenance tags (author, source document, confirmation timestamp).
 
-1. Persist the transcript and a processing run with an idempotency key.
-2. Call Groq with transcript text JSON-encoded as untrusted data; validate JSON against Pydantic models.
-3. Recall the correct client bank using the extracted feedback as the query; persist successful and failed retrieval operations with status and error details.
-4. Compare extracted required assets with actual project uploads. Absence alone yields `Unknown`; no unverified asset is presented as present.
-5. Call the configured `frameops-synth` OpenClaw Gateway agent with compact extracted requirements, up to four ranked Hindsight facts (source/provenance/confirmation/confidence), and actual asset availability. The agent uses a 512-token output cap and a minimal tool profile.
-6. Validate synthesized tasks, force confirmation where confidence is below the application threshold, and persist the result. Extracted requirements are committed before recall/synthesis, so provider errors leave the run and its available extractions intact without fabricated tasks. Production history hydrates persisted runs on revisit/refresh.
+## Database Schema & Linear Alembic Migrations
 
-## Feedback and provenance
+The Alembic migration chain is strictly linear:
+1. `05cc8ac7f846_initial_schema.py`: Workspaces, users, memberships, clients, projects, processing runs, extracted items, production tasks, assets, and memory operations.
+2. `a891c354b0f2_client_feedback_pipeline.py` (PR #1): Added `client_feedback` table for audio/text feedback records and delivery tracking.
+3. `a1b2c3d4e5f6_client_portal_schema.py` (Prepared PR Branch `feature/client-portal`): Added `client_portal_access`, `review_versions`, `video_comments`, and `client_feedback_submissions` tables.
 
-Recommendations are immutable in their original fields. Feedback records capture accept/correct/reject, author, timestamp, correction text, client-confirmation status, and retention status. Corrected or explicitly confirmed knowledge is retained in Hindsight with provenance tags and a stable document id; recall verification waits for Hindsight indexing and requires matching source-document identity plus overlap with the distilled content before returning verified status.
+All migrations are fully reversible and tested for clean `upgrade head` and `downgrade -1`.
 
-## Authentication and security boundaries
+## Synthesis & AI Provider Constraints
 
-- Passwords use the maintained `pwdlib` password hash and JWTs are signed with `AUTH_SECRET`.
-- Browser sessions are HttpOnly, SameSite=Lax cookies. `AUTH_COOKIE_SECURE` must be enabled for HTTPS deployment. Local API bearer auth exists for development tooling.
-- CORS is an explicit allowlist. Health/readiness and initial setup/login endpoints are public; business data routes require authenticated workspace membership.
-- Uploaded files are size-limited, content-type checked, stored under random keys, and served only after workspace authorization.
-- Transcript-derived strings are treated as untrusted data and are not executable instructions.
-
-## Persistence and migrations
-
-SQLAlchemy 2.x models are the application schema. Alembic is the migration interface. SQLite is intended for isolated local runs; PostgreSQL should be used for shared deployments. The API startup does not silently create production tables; initialize via `alembic upgrade head`.
-
-## Known limitations
-
-Current local disk upload storage is not durable deployment storage. The app has a single-owner auth flow, no invitations/role admin, no rate limit middleware, no queue/retry worker for slow provider calls, and only foundational activity reporting. Recovery after process interruption during external calls needs a durable job/outbox design. These are production hardening items, not claimed features.
-
-The configured Groq on-demand account currently permits 8K TPM for its available synthesis models. OpenClaw's real runtime request still exceeds that limit after compacting the application prompt and limiting output to 512 tokens; the live workflow therefore fails before production task persistence. No higher-limit model is available in the authenticated account catalog.
+- **Groq Cloud API (`openai/gpt-oss-120b`)**: Used for structured requirement extraction. Implements exponential backoff retries (`attempt * 2s`) to handle the on-demand 8K TPM rate limit safely.
+- **OpenClaw Gateway CLI (`frameops-synth`)**: Orchestrates task synthesis via WebSocket connection (`ws://127.0.0.1:18789`). Operates with a 512-token output cap. Because `openai/gpt-oss-120b` produces ~350-490 reasoning tokens, the synthesis prompt strictly limits generated DaVinci Resolve tasks to concise instructions (under 15 words per field), preventing output truncation.

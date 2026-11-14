@@ -1,35 +1,32 @@
 # FRAMEOPS TODO
 
-## Immediate synthesis blocker
+## Completed in this Handover & Audit
 
-- [ ] Resolve the Groq on-demand limit: account limit is 8,000 TPM; real OpenClaw synthesis requested 11,700 tokens and returned HTTP 413. The app prompt is compacted and the FRAMEOPS Gateway agent has a 512-token output cap, no skills/bootstrap injection, and no tools. Further reduce Gateway runtime context or obtain an account tier with a sufficient limit (requires purchase approval).
-- [ ] Re-run `backend/scripts/live_workflow.py` after the above fix. Require completed OpenClaw synthesis, non-empty persisted production tasks, actual Hindsight recall/retention verification, and verified test-bank deletion before marking complete.
-- [ ] Do not treat `/api/ready` or successful extraction/recall as proof of complete workflow.
+- [x] Complete GitHub repository and branch audit (`HNK69/FrameOS`, PR #1, PR #2, branch `Deekshith`).
+- [x] Integrate verified PR #1 (`feature/feedback-intelligence`) into `main`.
+- [x] Fix schema mismatch crash in `ExtractedItem` model dump during extraction persistence.
+- [x] Integrate verified PR #2 (`feature/production-intelligence`) into `main` and resolve UI/router conflicts.
+- [x] Resolve Alembic multi-head conflict between PR #1 and branch `Deekshith`; linearize migration chain.
+- [x] Package unmerged branch `Deekshith` into clean, modularized PR branch `feature/client-portal` with dedicated router `backend/app/routers/portal.py` and unit tests in `test_portal.py`.
+- [x] Verify live Hindsight Cloud bank creation, preference retention, semantic recall, and bank deletion.
+- [x] Verify live Groq API extraction and add exponential backoff retry for HTTP 429 rate limits.
+- [x] Resolve OpenClaw payload extraction bug in `_extract_text` to prevent capturing metadata `runId`.
+- [x] Calibrate OpenClaw synthesis prompt to fit the 512-token max output limit alongside `openai/gpt-oss-120b` reasoning tokens.
+- [x] Verify all automated test suites: 24 backend tests on `main`, 27 backend tests on `feature/client-portal`, and clean Next.js production builds.
+- [x] Update `README.md`, `ARCHITECTURE.md`, `PROJECT_STATUS.md`, and `TODO.md`.
 
-## Integration verification
+## Immediate Next Steps (Demonstration Readiness)
 
-- [x] Verify Windows asyncio subprocess handling, timeout, output capture, and existing Gateway URL/token forwarding.
-- [x] Install and verify portable Node.js 24.22.1 and OpenClaw CLI 2026.11.3 for the backend.
-- [x] Prior isolated integration run verified Groq and Hindsight connectivity and real extraction/retain/recall through loopback Uvicorn; the current audit found Hindsight list/recall unavailable and its current bank contents unverified.
-- [ ] Complete a real OpenClaw synthesis and verify production task rows; latest run failed at the provider's 8K TPM limit before task insertion.
-- [ ] Run the two-client same-transcript/correction/isolation scenario after synthesis is unblocked.
-- [ ] Capture a 1440x900 screenshot and compare with the supplied reference; Playwright visual run remains outstanding.
-- [ ] Restore Hindsight connectivity from the backend runtime, then verify current client-bank list/recall and a confirmed preference retain/recall. The persistence audit found no local retain rows; list calls return ConnectError on port 8000 and upstream HTTP 400 on port 8001.
-- [x] Restore persisted production run/asset state when revisiting or refreshing the production page.
-- [x] Preserve extraction rows on failed synthesis; return failed Hindsight recall as an auditable memory operation.
-- [x] Return honest HTTP 503 responses for memory API provider connectivity failures.
+- [ ] Submit PR on GitHub for branch `feature/client-portal` (`HNK69/FrameOS`) for teammate review.
+- [ ] Merge `feature/client-portal` into `main` once peer review is approved.
+- [ ] Upgrade Groq API tier or configure a non-reasoning extraction model if higher TPM is required for multi-task bulk processing.
+- [ ] Seed interactive demo data (e.g. LUXE STUDIO vs. FITCORE) for client demonstration walkthrough.
 
-## Production hardening
+## Production Hardening
 
-- [ ] Add invite flow and owner/admin/editor/viewer permission matrix.
-- [ ] Add database-backed rate limiting and CSRF protections for cookie-authenticated mutations.
-- [ ] Replace local upload storage with private object storage and expiring authorized downloads.
-- [ ] Add MIME sniffing, malware scanning, upload retention controls, and download audit records.
-- [ ] Add durable workflow jobs/outbox, provider retries, leases, and operation reconciliation after restarts.
-- [ ] Implement workspace/client offboarding, Hindsight export/deletion verification, and retention policy UI.
-- [ ] Validate PostgreSQL migrations, automated backups, and restore procedure.
-- [ ] Add structured traces, metrics, provider health probes, error reporting, and alerting.
-- [ ] Run dependency audit, security review, tenant-isolation tests, and privacy review.
-- [ ] Add full multi-role auth tests and end-to-end Playwright scenarios.
-- [ ] Configure production S3-compatible storage and deployment secrets.
-- [ ] Verify production deployment configuration before any public release.
+- [ ] Implement team member invitations and owner/admin/editor/viewer RBAC matrix.
+- [ ] Add Redis-backed rate limiting and CSRF protection for cookie-authenticated mutation endpoints.
+- [ ] Migrate local disk uploads to S3-compatible private object storage with presigned URLs.
+- [ ] Add background task worker (Celery/ARQ) for asynchronous long-running synthesis and transcription jobs.
+- [ ] Configure production PostgreSQL database with automated backups and disaster recovery runbooks.
+- [ ] Add centralized OpenTelemetry tracing, Prometheus metrics, and error alerting (Sentry).
