@@ -25,6 +25,9 @@ def client_env(monkeypatch):
             db.close()
 
     monkeypatch.setattr(settings, "auth_secret", "test-portal-secret-with-high-entropy-12345678")
+    monkeypatch.setattr(settings, "groq_api_key", "")
+    monkeypatch.setattr(settings, "hindsight_api_token", "")
+    monkeypatch.setattr(settings, "hindsight_api_url", "")
     app.dependency_overrides[get_db] = test_db
 
     # Create workspace, owner, two clients, and projects
@@ -125,7 +128,45 @@ def test_portal_access_generation_and_client_isolation(client_env):
     assert forbidden_res.status_code == 404
 
 
-def test_portal_ai_structured_draft_and_confirmation(client_env):
+def test_portal_ai_structured_draft_and_confirmation(client_env, monkeypatch):
+    from app.services import groq, hindsight
+    from app.schemas import ExtractionResult, ExtractionItem
+
+    async def mock_extract(content: str):
+        return ExtractionResult(
+            requests=[
+                ExtractionItem(
+                    description="The intro pacing feels too slow, trim 2 seconds from the opening logo reveal.",
+                    category="Pacing",
+                    classification="explicit",
+                    confidence=0.95,
+                    requires_confirmation=False,
+                ),
+                ExtractionItem(
+                    description="Make the sound design punchier during the shoe drop.",
+                    category="Audio",
+                    classification="explicit",
+                    confidence=0.92,
+                    requires_confirmation=False,
+                ),
+            ],
+            ambiguities=["Maybe make the color grade warmer in the night scene."],
+            production_risks=[],
+            missing_information=[],
+            required_assets=[],
+        )
+
+    async def mock_retain(bank_id, content, context, tags, document_id):
+        return {"id": "mock-hindsight-id-123", "text": content}, True
+
+    monkeypatch.setattr(settings, "groq_api_key", "mock-groq-key")
+    monkeypatch.setattr(settings, "groq_model", "mock-groq-model")
+    monkeypatch.setattr(settings, "hindsight_api_token", "mock-token")
+    monkeypatch.setattr(settings, "hindsight_api_url", "https://api.hindsight.test")
+    monkeypatch.setattr(groq, "extract_feedback", mock_extract)
+    monkeypatch.setattr(hindsight, "retain_and_verify", mock_retain)
+    monkeypatch.setattr(hindsight, "configured", lambda: True)
+
     owner = TestClient(app)
     owner.headers["Authorization"] = f"Bearer {client_env['owner_token']}"
     access_a = owner.get(f"/api/clients/{client_env['client_a_id']}/portal-access").json()
@@ -165,6 +206,29 @@ def test_portal_ai_structured_draft_and_confirmation(client_env):
     assert sub_res.status_code == 201
     assert sub_res.json()["status"] == "submitted"
     assert len(sub_res.json()["items"]) == len(reviewed_items)
+
+
+def test_portal_fallback_parser_without_ai(client_env):
+    """Ensure regex fallback works 100% offline with zero AI credentials."""
+    owner = TestClient(app)
+    owner.headers["Authorization"] = f"Bearer {client_env['owner_token']}"
+    access_a = owner.get(f"/api/clients/{client_env['client_a_id']}/portal-access").json()
+
+    portal = TestClient(app)
+    portal.headers["X-Portal-Token"] = access_a["access_token"]
+
+    draft_payload = {
+        "feedback_type": "text",
+        "content": "The intro pacing feels too slow, trim 2 seconds from the opening logo reveal.\nMake the sound design punchier during the shoe drop.\nMaybe make the color grade warmer in the night scene."
+    }
+    draft_res = portal.post(f"/api/portal/projects/{client_env['proj_a1_id']}/feedback/draft", json=draft_payload)
+    assert draft_res.status_code == 200
+    draft_data = draft_res.json()
+    assert len(draft_data["requests"]) >= 2
+    categories = [r["category"] for r in draft_data["requests"]]
+    assert any("Pacing" in c for c in categories)
+    assert any("Audio" in c for c in categories)
+    assert len(draft_data["ambiguities"]) > 0
 
 
 def test_portal_video_comments_and_decisions(client_env):

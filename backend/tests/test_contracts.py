@@ -186,10 +186,20 @@ def test_failed_hindsight_recall_is_recorded_without_losing_extraction(monkeypat
     async def recall_fails(_bank_id, _query):
         raise groq.ServiceUnavailable("Hindsight recall failed: ConnectError")
 
+    from app.services import openclaw
+
+    async def mock_execute_cli(*args, **kwargs):
+        class MockProc:
+            returncode = 1
+            stdout = b""
+            stderr = b"OpenClaw gateway unavailable in isolated test"
+        return MockProc()
+
     monkeypatch.setattr(settings, "auth_secret", "isolated-test-secret-with-sufficient-entropy")
     monkeypatch.setattr(settings, "hindsight_api_url", "")
     monkeypatch.setattr(groq, "extract_feedback", extracted)
     monkeypatch.setattr(hindsight, "recall", recall_fails)
+    monkeypatch.setattr(openclaw, "_execute_cli", mock_execute_cli)
     app.dependency_overrides[get_db] = test_db
     try:
         with TestClient(app) as owner:
@@ -250,3 +260,28 @@ def test_hindsight_memory_api_reports_provider_connectivity_as_503(monkeypatch):
         app.dependency_overrides.pop(get_db, None)
         Base.metadata.drop_all(engine)
         engine.dispose()
+
+
+def test_openclaw_memory_evidence_supports_both_list_and_dict():
+    from app.services.openclaw import _memory_evidence
+
+    # Degraded recall returns [] or {"results": []} or {"memories": []}
+    assert _memory_evidence([]) == []
+    assert _memory_evidence({}) == []
+    assert _memory_evidence({"results": []}) == []
+    assert _memory_evidence({"memories": []}) == []
+    assert _memory_evidence(None) == []
+
+    # Valid list of dicts
+    items = [{"text": "Pacing must be under 30s", "context": "brand guidelines", "document_id": "doc-1"}]
+    evidence = _memory_evidence(items)
+    assert len(evidence) == 1
+    assert evidence[0]["evidence"] == "Pacing must be under 30s"
+    assert evidence[0]["provenance"] == "brand guidelines"
+    assert evidence[0]["source"] == "doc-1"
+
+    # Valid dict results
+    dict_mem = {"results": [{"text": "Color scheme: navy blue", "tags": ["brand"]}]}
+    evidence_dict = _memory_evidence(dict_mem)
+    assert len(evidence_dict) == 1
+    assert evidence_dict[0]["evidence"] == "Color scheme: navy blue"

@@ -1,4 +1,4 @@
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
+const API = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001").replace(/\/+$/, "");
 
 export async function api<T = any>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);

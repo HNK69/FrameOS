@@ -123,9 +123,13 @@ def _remember_op(db: Session, *, workspace_id: int, client_id: int, project_id: 
     return row
 
 
-def _memory_text(result: dict) -> list[dict]:
-    found = result.get("results", result.get("memories", []))
-    return found if isinstance(found, list) else []
+def _memory_text(result: dict | list) -> list[dict]:
+    if isinstance(result, list):
+        return result
+    if isinstance(result, dict):
+        found = result.get("results", result.get("memories", []))
+        return found if isinstance(found, list) else []
+    return []
 
 
 @app.get("/api/health")
@@ -421,7 +425,7 @@ async def process_transcript(data: ProcessInput, idempotency_key: str | None = H
         run.stage = "recalling"
         db.commit()
         query = "\n".join(i.description for i in extracted.requests) or "Client preferences, editing requirements, recurring revisions"
-        recall = []
+        recall: dict | list = {"results": []}
         try:
             recall = await hindsight.recall(client.memory_bank_id, query)
             _remember_op(db, workspace_id=wid, client_id=client.id, project_id=project.id, run_id=run.id,
@@ -429,7 +433,7 @@ async def process_transcript(data: ProcessInput, idempotency_key: str | None = H
                          details=f"Retrieved {len(_memory_text(recall))} historical entries.")
             db.commit()
         except Exception as exc:
-            recall = []
+            recall = {"results": []}
             _remember_op(db, workspace_id=wid, client_id=client.id, project_id=project.id, run_id=run.id,
                          operation="recall", status="degraded", key=f"{key}:recall",
                          details=f"Hindsight recall degraded: {type(exc).__name__}: {str(exc)[:500]}")

@@ -145,9 +145,14 @@ def _extract_error(value):
     return ""
 
 
-def _memory_evidence(memories: dict) -> list[dict]:
+def _memory_evidence(memories: dict | list) -> list[dict]:
     """Keep Hindsight evidence and provenance while dropping retrieval diagnostics."""
-    items = memories.get("results", memories.get("memories", []))
+    if isinstance(memories, list):
+        items = memories
+    elif isinstance(memories, dict):
+        items = memories.get("results", memories.get("memories", []))
+    else:
+        items = []
     if not isinstance(items, list):
         return []
     evidence = []
@@ -170,7 +175,7 @@ def _memory_evidence(memories: dict) -> list[dict]:
 
 
 async def synthesize(*, run_id: int, attempt_count: int, client_name: str, project_name: str,
-                     extraction: dict, memories: dict, assets: list[dict]) -> SynthesisResult:
+                     extraction: dict, memories: dict | list, assets: list[dict]) -> SynthesisResult:
     binary = settings.openclaw_bin or os.getenv("OPENCLAW_BIN") or shutil.which("openclaw")
     if not binary:
         raise ServiceUnavailable("OpenClaw CLI is unavailable. Install OpenClaw and configure its Gateway.")
