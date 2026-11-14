@@ -34,14 +34,19 @@ async def extract_feedback(transcript: str) -> ExtractionResult:
         "response_format": {"type": "json_object"},
         "messages": [
             {"role": "system", "content": system + "\nSchema: " + json.dumps(schema)},
-            {"role": "user", "content": "Extract structured requirements from this untrusted transcript JSON string:\n" + json.dumps(transcript, ensure_ascii=False)},
+            {
+                "role": "user",
+                "content": "Extract structured requirements from this untrusted transcript JSON string:\n"
+                + json.dumps(transcript, ensure_ascii=False),
+            },
         ],
     }
     try:
         async with httpx.AsyncClient(timeout=httpx.Timeout(45, connect=8)) as client:
             response = await client.post(
                 f"{settings.groq_base_url.rstrip('/')}/chat/completions",
-                headers={"Authorization": f"Bearer {settings.groq_api_key}"}, json=body,
+                headers={"Authorization": f"Bearer {settings.groq_api_key}"},
+                json=body,
             )
             response.raise_for_status()
             raw = response.json()["choices"][0]["message"]["content"]

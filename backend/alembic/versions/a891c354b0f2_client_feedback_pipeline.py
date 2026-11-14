@@ -3,8 +3,10 @@
 Revision ID: a891c354b0f2
 Revises: 05cc8ac7f846
 """
-from alembic import op
+
 import sqlalchemy as sa
+
+from alembic import op
 
 revision = "a891c354b0f2"
 down_revision = "05cc8ac7f846"
@@ -16,9 +18,24 @@ def upgrade() -> None:
     op.create_table(
         "client_feedback",
         sa.Column("id", sa.Integer(), primary_key=True),
-        sa.Column("workspace_id", sa.Integer(), sa.ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False),
-        sa.Column("client_id", sa.Integer(), sa.ForeignKey("clients.id", ondelete="CASCADE"), nullable=False),
-        sa.Column("project_id", sa.Integer(), sa.ForeignKey("projects.id", ondelete="CASCADE"), nullable=False),
+        sa.Column(
+            "workspace_id",
+            sa.Integer(),
+            sa.ForeignKey("workspaces.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
+        sa.Column(
+            "client_id",
+            sa.Integer(),
+            sa.ForeignKey("clients.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
+        sa.Column(
+            "project_id",
+            sa.Integer(),
+            sa.ForeignKey("projects.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
         sa.Column("submitted_by", sa.Integer(), sa.ForeignKey("users.id"), nullable=False),
         sa.Column("idempotency_key", sa.String(120), nullable=False),
         sa.Column("source_type", sa.String(16), nullable=False),
@@ -40,7 +57,9 @@ def upgrade() -> None:
         sa.Column("delivered_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
-        sa.UniqueConstraint("workspace_id", "idempotency_key", name="uq_client_feedback_workspace_key"),
+        sa.UniqueConstraint(
+            "workspace_id", "idempotency_key", name="uq_client_feedback_workspace_key"
+        ),
     )
     for column in ("workspace_id", "client_id", "project_id", "status"):
         op.create_index(f"ix_client_feedback_{column}", "client_feedback", [column])

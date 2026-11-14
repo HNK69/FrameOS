@@ -64,8 +64,14 @@ class ExtractionItem(BaseModel):
     classification: str = Field(pattern="^(explicit|inferred)$")
     confidence: float = Field(ge=0, le=1)
     requires_confirmation: bool
-    kind: str = Field(default="request", pattern="^(request|revision|style_preference|constraint|duration|clarification)$")
-    memory_class: str = Field(default="project_specific", pattern="^(project_specific|temporary_revision|reusable_preference|confirmed_preference|editor_correction)$")
+    kind: str = Field(
+        default="request",
+        pattern="^(request|revision|style_preference|constraint|duration|clarification)$",
+    )
+    memory_class: str = Field(
+        default="project_specific",
+        pattern="^(project_specific|temporary_revision|reusable_preference|confirmed_preference|editor_correction)$",
+    )
 
 
 class ExtractionResult(BaseModel):
