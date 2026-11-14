@@ -1,4 +1,5 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
+from typing import ClassVar
 
 from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -207,6 +208,48 @@ class ClientPortalAccess(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
     last_accessed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     client: Mapped[Client] = relationship()
+
+    _is_active: ClassVar[bool] = True
+    _expires_at: ClassVar[datetime | None] = None
+
+    def __init__(self, **kwargs):
+        self._is_active = kwargs.pop("is_active", True)
+        self._expires_at = kwargs.pop("expires_at", None)
+        super().__init__(**kwargs)
+
+    @property
+    def is_active(self) -> bool:
+        return getattr(self, "_is_active", True)
+
+    @is_active.setter
+    def is_active(self, val: bool):
+        self._is_active = bool(val)
+
+    @property
+    def expires_at(self) -> datetime | None:
+        val = getattr(self, "_expires_at", None)
+        if val is not None:
+            if val.tzinfo is None:
+                return val.replace(tzinfo=UTC)
+            return val
+        if hasattr(self, "created_at") and self.created_at:
+            dt = self.created_at
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=UTC)
+            return dt + timedelta(days=30)
+        return None
+
+    @expires_at.setter
+    def expires_at(self, val: datetime | None):
+        self._expires_at = val
+
+    @property
+    def passcode_hash(self) -> str:
+        return self.passcode
+
+    @passcode_hash.setter
+    def passcode_hash(self, val: str):
+        self.passcode = val
 
 
 class ReviewVersion(Base):

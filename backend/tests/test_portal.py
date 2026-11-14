@@ -212,3 +212,89 @@ def test_portal_video_comments_and_decisions(client_env):
     # 5. Check feedback history status indicators
     feedback_list = portal.get(f"/api/portal/projects/{client_env['proj_a1_id']}/feedback").json()
     assert len(feedback_list) >= 2
+
+
+def test_security_email_only_login_rejected_401(client_env):
+    """Ensure email-only submission without passcode or token is strictly rejected (HTTP 401)."""
+    client = TestClient(app)
+    res = client.post("/api/portal/auth/login", json={"email": "client@nike.com"})
+    assert res.status_code == 401
+    assert "Passcode or access token is required" in res.json().get("detail", "")
+
+
+def test_security_invalid_passcode_rejected_401(client_env):
+    """Ensure invalid passcodes are strictly rejected with HTTP 401."""
+    client = TestClient(app)
+    res = client.post("/api/portal/auth/login", json={"code": "INVALID-PASSCODE-9999"})
+    assert res.status_code == 401
+    assert "Invalid client portal access token or code" in res.json().get("detail", "")
+
+
+def test_security_expired_token_rejected_401(client_env):
+    """Ensure expired JWT session tokens and expired access tokens return HTTP 401."""
+    import jwt
+    from datetime import datetime, UTC, timedelta
+    
+    # 1. Expired JWT
+    expired_time = datetime.now(UTC) - timedelta(hours=2)
+    expired_jwt = jwt.encode(
+        {"sub": f"client:{client_env['client_a_id']}", "client_id": client_env['client_a_id'],
+         "workspace_id": 1, "role": "client", "iat": expired_time - timedelta(hours=1), "exp": expired_time},
+        settings.auth_secret,
+        algorithm="HS256",
+    )
+    client = TestClient(app)
+    client.headers["Authorization"] = f"Bearer {expired_jwt}"
+    res = client.get("/api/portal/auth/me")
+    assert res.status_code == 401
+
+    # 2. Expired portal access token directly
+    owner = TestClient(app)
+    owner.headers["Authorization"] = f"Bearer {client_env['owner_token']}"
+    access_res = owner.get(f"/api/clients/{client_env['client_a_id']}/portal-access")
+    token_str = access_res.json()["access_token"]
+
+    from app.models import ClientPortalAccess
+    from sqlalchemy.orm import Session as OrmSession
+    with OrmSession(client_env["engine"]) as db_session:
+        acc = db_session.query(ClientPortalAccess).filter_by(access_token=token_str).first()
+        acc.created_at = datetime.now(UTC) - timedelta(days=60)
+        db_session.commit()
+
+    portal_client = TestClient(app)
+    login_expired = portal_client.post("/api/portal/auth/login", json={"token": token_str})
+    assert login_expired.status_code == 401
+
+
+def test_security_cross_client_tenant_isolation_404(client_env):
+    """Ensure Client A cannot read, comment, or approve Client B's projects (HTTP 404)."""
+    owner = TestClient(app)
+    owner.headers["Authorization"] = f"Bearer {client_env['owner_token']}"
+    access_a = owner.get(f"/api/clients/{client_env['client_a_id']}/portal-access").json()
+
+    portal_a = TestClient(app)
+    login_a = portal_a.post("/api/portal/auth/login", json={"code": access_a["passcode"]})
+    assert login_a.status_code == 200
+    token_a = login_a.json()["token"]
+    portal_a.headers["Authorization"] = f"Bearer {token_a}"
+
+    b_proj_id = client_env["proj_b1_id"]
+    assert portal_a.get(f"/api/portal/projects/{b_proj_id}").status_code == 404
+    assert portal_a.get(f"/api/portal/projects/{b_proj_id}/comments").status_code == 404
+    assert portal_a.post(
+        f"/api/portal/projects/{b_proj_id}/comments",
+        json={"content": "Sneak peek", "timestamp_seconds": 10.0, "timecode": "00:10"}
+    ).status_code == 404
+    assert portal_a.post(
+        f"/api/portal/projects/{b_proj_id}/decision",
+        json={"decision": "approve", "notes": "Unauthorized approval attempt"}
+    ).status_code == 404
+
+
+def test_security_unauthorized_route_access_401(client_env):
+    """Ensure unauthenticated callers cannot access portal API routes without credentials (HTTP 401)."""
+    unauth = TestClient(app)
+    assert unauth.get("/api/portal/auth/me").status_code == 401
+    assert unauth.get("/api/portal/projects").status_code == 401
+    assert unauth.get(f"/api/portal/projects/{client_env['proj_a1_id']}").status_code == 401
+    assert unauth.get(f"/api/portal/projects/{client_env['proj_a1_id']}/comments").status_code == 401

@@ -79,15 +79,24 @@ def current_client_identity(
 
     portal_access = db.scalar(
         select(ClientPortalAccess).where(
-            (ClientPortalAccess.access_token == token) | (ClientPortalAccess.passcode == token)
+            ClientPortalAccess.access_token == token
         )
     )
     if portal_access:
+        if not getattr(portal_access, "is_active", True):
+            raise HTTPException(401, "Client portal access has been deactivated")
+        expires_at = getattr(portal_access, "expires_at", None)
+        if expires_at:
+            if expires_at.tzinfo is None:
+                expires_at = expires_at.replace(tzinfo=UTC)
+            if expires_at < now_utc():
+                raise HTTPException(401, "Client portal access has expired")
         client = db.get(Client, portal_access.client_id)
         if client:
             portal_access.last_accessed_at = now_utc()
             db.commit()
             return client, client.workspace_id
+        raise HTTPException(401, "Client account not found")
 
     if not settings.auth_secret:
         raise HTTPException(503, "Authentication service is not configured")

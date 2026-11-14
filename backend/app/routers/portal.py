@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 import json
 import logging
 import mimetypes
@@ -34,7 +35,9 @@ from ..schemas import (
 from ..security import (
     current_client_identity,
     current_identity,
+    hash_password,
     issue_client_token,
+    verify_password,
 )
 from ..services import groq
 
@@ -234,20 +237,39 @@ def get_client_portal_access(client_id: int, db: Session = Depends(get_db), iden
 
 @router.post("/api/portal/auth/login")
 def portal_login(data: PortalLoginInput, response: Response, db: Session = Depends(get_db)):
+    if not data.token and not data.code:
+        raise HTTPException(401, "Passcode or access token is required")
+
     access = None
     if data.token:
         access = db.scalar(select(ClientPortalAccess).where(ClientPortalAccess.access_token == data.token.strip()))
     elif data.code:
-        access = db.scalar(
-            select(ClientPortalAccess).where(func.upper(ClientPortalAccess.passcode) == data.code.strip().upper())
-        )
-    elif data.email:
-        access = db.scalar(
-            select(ClientPortalAccess).where(func.lower(ClientPortalAccess.client_email) == data.email.strip().lower())
-        )
+        input_code = data.code.strip()
+        candidates = db.scalars(select(ClientPortalAccess)).all()
+        for cand in candidates:
+            if cand.passcode.startswith("$"):
+                try:
+                    if verify_password(input_code, cand.passcode):
+                        access = cand
+                        break
+                except Exception:
+                    pass
+            elif cand.passcode.upper() == input_code.upper():
+                access = cand
+                break
 
     if not access:
         raise HTTPException(401, "Invalid client portal access token or code")
+
+    if not getattr(access, "is_active", True):
+        raise HTTPException(401, "Client portal access has been revoked or is inactive")
+
+    expires_at = getattr(access, "expires_at", None)
+    if expires_at:
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=UTC)
+        if expires_at < now_utc():
+            raise HTTPException(401, "Client portal access token has expired")
 
     client = db.get(Client, access.client_id)
     if not client:
