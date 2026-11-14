@@ -29,7 +29,7 @@ class ProjectInput(InputModel):
     client_id: int
     name: str = Field(min_length=1, max_length=180)
     description: str = Field(default="", max_length=5000)
-    status: str = Field(default="active", pattern="^(active|completed|archived)$")
+    status: str = Field(default="active", pattern="^(active|in_review|completed|archived)$")
     due_date: datetime | None = None
 
 

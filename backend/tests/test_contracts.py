@@ -35,6 +35,9 @@ def test_feedback_requires_known_action_and_confirmation_is_explicit():
 def test_project_status_is_bounded():
     with pytest.raises(ValidationError):
         ProjectInput(client_id=1, name="Campaign", status="imaginary")
+    for valid_status in ("active", "in_review", "completed", "archived"):
+        proj = ProjectInput(client_id=1, name="Campaign", status=valid_status)
+        assert proj.status == valid_status
 
 
 def test_synthesized_task_requires_resolve_and_confirmation_fields():
