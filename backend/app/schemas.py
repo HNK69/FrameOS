@@ -39,8 +39,29 @@ class ProcessInput(InputModel):
 
 
 class FeedbackInput(InputModel):
-    action: str = Field(pattern="^(accept|correct|reject)$")
+    action: str = Field(pattern="^(accept|correct|reject|in_progress|completed|blocked)$")
     correction: str = Field(default="", max_length=5000)
+    client_confirmed: bool = False
+    knowledge_type: str = Field(default="editor_correction", pattern="^(editor_correction|client_confirmed|reusable_client_knowledge|project_specific)$")
+    priority: str | None = Field(default=None, pattern="^(low|medium|high|urgent)$")
+
+
+class TaskUpdateInput(InputModel):
+    status: str | None = Field(default=None, pattern="^(pending|in_progress|completed|blocked|accepted|rejected)$")
+    priority: str | None = Field(default=None, pattern="^(low|medium|high|urgent)$")
+    instruction: str | None = Field(default=None, max_length=5000)
+    title: str | None = Field(default=None, max_length=200)
+    resolve_workflow: str | None = Field(default=None, max_length=5000)
+    correction_note: str | None = Field(default=None, max_length=5000)
+    knowledge_type: str = Field(default="editor_correction", pattern="^(editor_correction|client_confirmed|reusable_client_knowledge|project_specific)$")
+    client_confirmed: bool = False
+
+
+class AdaptiveKnowledgeInput(InputModel):
+    content: str = Field(min_length=5, max_length=12000)
+    knowledge_type: str = Field(default="reusable_client_knowledge", pattern="^(reusable_client_knowledge|client_confirmed|project_specific|editor_correction)$")
+    project_id: int | None = None
+    category: str = Field(default="general", max_length=48)
     client_confirmed: bool = False
 
 

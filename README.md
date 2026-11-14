@@ -69,8 +69,9 @@ The OpenClaw CLI process uses `OPENCLAW_GATEWAY_URL` and `OPENCLAW_GATEWAY_TOKEN
 - Health/configuration: `GET /api/health`, `GET /api/ready`
 - Initial owner/session: `GET /api/auth/status`, `POST /api/auth/setup`, `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/me`
 - Clients/projects: `GET|POST /api/clients`, `GET|PATCH|DELETE /api/clients/{id}`, `GET|POST /api/projects`, `GET|PATCH|DELETE /api/projects/{id}`
-- Production: `POST /api/process-transcript`, `GET /api/runs/{id}`, `GET /api/tasks`, `POST /api/tasks/{id}/feedback`
+- Production: `POST /api/process-transcript`, `GET /api/runs/{id}`, `GET /api/tasks`, `GET /api/tasks/{id}`, `PATCH /api/tasks/{id}`, `POST /api/tasks/{id}/feedback`
 - Client feedback: `POST /api/feedback`, `POST /api/feedback/audio`, `GET /api/feedback/{id}`, `PATCH /api/feedback/{id}/confirmation`, `POST /api/feedback/{id}/retry`, `GET /api/agency/feedback`, `POST /api/agency/feedback/{id}/deliver` (see [feedback API contract](backend/FEEDBACK_API.md))
+- Production intelligence & assets: `GET /api/production-analytics`, `GET /api/projects/{id}/asset-intelligence`, `GET|POST /api/clients/{id}/adaptive-knowledge` (see [production intelligence API contract](backend/PRODUCTION_INTELLIGENCE_API.md))
 - Memory: `GET /api/clients/{id}/memories`, `POST /api/memory/retain`, `POST /api/memory/recall`, `POST /api/memory/reflect`
 - Assets and analytics: `POST /api/projects/{id}/assets`, `GET /api/assets/{id}/download`, `GET /api/analytics`
 
@@ -95,7 +96,7 @@ cd ..\frontend
 npm run build
 ```
 
-The automated suite has 12 tests, including Windows selector-loop subprocess execution and timeout behavior, Gateway environment forwarding, and isolated API/auth contracts. These tests do not mock their way into claiming external-provider integration.
+The automated suite has 19 tests, including production task lifecycle, provenance preservation, asset evidence verification, operational analytics, Windows selector-loop subprocess execution and timeout behavior, Gateway environment forwarding, and isolated API/auth contracts. These tests do not mock their way into claiming external-provider integration.
 
 To exercise the real configured providers, run `python scripts/live_workflow.py` from `backend`. It starts Uvicorn on loopback port 8000 with an isolated SQLite database, creates a temporary client and Hindsight bank through the API, runs extraction/recall/retain/synthesis, verifies task persistence, and attempts remote bank cleanup. It aborts if port 8000 is occupied. A failed run leaves its local verification database/log for diagnosis.
 

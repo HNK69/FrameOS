@@ -9,7 +9,7 @@ from uuid import uuid4
 from fastapi import Depends, FastAPI, File, Header, HTTPException, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
-from sqlalchemy import func, select, text
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from .config import settings
@@ -30,6 +30,7 @@ from .models import (
     now_utc,
 )
 from .routers.feedback import router as feedback_router
+from .routers.production_intelligence import router as production_router
 from .schemas import (
     ClientInput,
     FeedbackInput,
@@ -41,6 +42,7 @@ from .schemas import (
 )
 from .security import current_identity, hash_password, issue_token, verify_password
 from .services import groq, hindsight, openclaw
+from .services.production_analytics import get_production_analytics
 
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"), format="%(message)s")
 log = logging.getLogger("frameops")
@@ -56,6 +58,7 @@ app.include_router(feedback_router)
 origins = [origin.strip() for origin in settings.cors_origins.split(",") if origin.strip()]
 app.add_middleware(CORSMiddleware, allow_origins=origins, allow_credentials=True,
                    allow_methods=["GET", "POST", "PATCH", "DELETE"], allow_headers=["Authorization", "Content-Type", "Idempotency-Key"])
+app.include_router(production_router)
 
 
 def _client_dict(c: Client, db: Session) -> dict:
@@ -473,7 +476,9 @@ def task_dict(t: ProductionTask) -> dict:
     return {"id": t.id, "title": t.title, "category": t.category, "instruction": t.instruction,
             "resolve_workflow": t.resolve_workflow, "priority": t.priority, "source": t.source,
             "evidence": t.evidence, "confidence": t.confidence,
-            "requires_confirmation": t.requires_confirmation, "status": t.status}
+            "requires_confirmation": t.requires_confirmation, "status": t.status,
+            "project_id": t.project_id, "client_id": t.client_id, "run_id": t.run_id,
+            "created_at": t.created_at.isoformat() if t.created_at else None}
 
 
 @app.get("/api/runs/{run_id}")
@@ -574,7 +579,9 @@ async def feedback(task_id: int, data: FeedbackInput, db: Session = Depends(get_
         raise HTTPException(404, "Task not found")
     if data.action == "correct" and not data.correction.strip():
         raise HTTPException(422, "A correction is required for the correct action")
-    task.status = {"accept": "accepted", "correct": "corrected", "reject": "rejected"}[data.action]
+    task.status = {"accept": "accepted", "correct": "corrected", "reject": "rejected"}.get(data.action, data.action)
+    if data.priority:
+        task.priority = data.priority
     feedback_row = Feedback(workspace_id=wid, client_id=task.client_id, project_id=task.project_id,
                             task_id=task.id, author_id=user.id, action=data.action,
                             original_recommendation=task.instruction, correction=data.correction.strip(),
@@ -620,29 +627,4 @@ async def feedback(task_id: int, data: FeedbackInput, db: Session = Depends(get_
 @app.get("/api/analytics")
 def analytics(db: Session = Depends(get_db), identity=Depends(current_identity)):
     _, wid, _ = identity
-    clients = db.query(Client).filter_by(workspace_id=wid).count()
-    active = db.query(Project).filter_by(workspace_id=wid, status="active").count()
-    completed = db.query(Project).filter_by(workspace_id=wid, status="completed").count()
-    memories = db.query(MemoryOperation).filter_by(workspace_id=wid, operation="retain", status="completed").count()
-    recalls = db.query(MemoryOperation).filter_by(workspace_id=wid, operation="recall", status="completed").count()
-    tasks_completed = db.query(ProductionTask).filter_by(workspace_id=wid, status="accepted").count()
-    pending = db.query(ProductionTask).filter_by(workspace_id=wid, status="pending").count()
-    history = db.execute(select(func.date(ProcessingRun.created_at), func.count(ProcessingRun.id))
-                         .where(ProcessingRun.workspace_id == wid).group_by(func.date(ProcessingRun.created_at))
-                         .order_by(func.date(ProcessingRun.created_at))).all()
-    return {"clients": clients, "active_projects": active, "completed_projects": completed,
-            "memories_retained": memories, "memory_retrievals": recalls,
-            "tasks_completed": tasks_completed, "pending_confirmations": pending,
-            "activity": [{"date": str(day), "runs": count} for day, count in history]}
-
-
-@app.get("/api/tasks")
-def list_tasks(project_id: int | None = None, status: str | None = None,
-               db: Session = Depends(get_db), identity=Depends(current_identity)):
-    _, wid, _ = identity
-    stmt = select(ProductionTask).where(ProductionTask.workspace_id == wid)
-    if project_id is not None:
-        stmt = stmt.where(ProductionTask.project_id == project_id)
-    if status and status != "all":
-        stmt = stmt.where(ProductionTask.status == status)
-    return [task_dict(t) for t in db.scalars(stmt.order_by(ProductionTask.created_at.desc())).all()]
+    return get_production_analytics(db, wid)
