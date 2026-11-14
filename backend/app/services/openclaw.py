@@ -86,23 +86,44 @@ async def _execute_cli(args: list[str], env: dict[str, str], timeout: float) -> 
 
 
 def _extract_text(value):
+    if not value:
+        return ""
     if isinstance(value, str):
         return value
     if isinstance(value, dict):
+        result = value.get("result")
+        if isinstance(result, dict):
+            payloads = result.get("payloads")
+            if isinstance(payloads, list) and payloads:
+                for p in payloads:
+                    if isinstance(p, dict) and p.get("text"):
+                        return p["text"]
+            for terminal_key in ("finalAssistantVisibleText", "finalAssistantRawText", "finalAssistantMessageRawText"):
+                candidate = result.get(terminal_key)
+                if isinstance(candidate, str) and candidate:
+                    return candidate
+            terminal_reply = result.get("terminalReply")
+            if isinstance(terminal_reply, dict) and isinstance(terminal_reply.get("text"), str):
+                return terminal_reply["text"]
+
         for key in ("reply", "text", "content", "message"):
             candidate = value.get(key)
-            if isinstance(candidate, str):
+            if isinstance(candidate, str) and candidate:
                 return candidate
             if isinstance(candidate, list):
                 text = "".join(part.get("text", "") for part in candidate if isinstance(part, dict))
                 if text:
                     return text
         for child in value.values():
+            if isinstance(child, (dict, list)):
+                found = _extract_text(child)
+                if found:
+                    return found
+    if isinstance(value, list):
+        for child in value:
             found = _extract_text(child)
             if found:
                 return found
-    if isinstance(value, list):
-        return "".join(_extract_text(child) for child in value)
     return ""
 
 
