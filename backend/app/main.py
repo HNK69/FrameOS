@@ -29,6 +29,7 @@ from .models import (
     Workspace,
     now_utc,
 )
+from .routers.feedback import router as feedback_router
 from .schemas import (
     ClientInput,
     FeedbackInput,
@@ -51,6 +52,7 @@ async def lifespan(_app: FastAPI):
 
 
 app = FastAPI(title="FRAMEOPS API", version="0.1.0", lifespan=lifespan)
+app.include_router(feedback_router)
 origins = [origin.strip() for origin in settings.cors_origins.split(",") if origin.strip()]
 app.add_middleware(CORSMiddleware, allow_origins=origins, allow_credentials=True,
                    allow_methods=["GET", "POST", "PATCH", "DELETE"], allow_headers=["Authorization", "Content-Type", "Idempotency-Key"])
