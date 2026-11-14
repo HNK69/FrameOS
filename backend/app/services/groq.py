@@ -1,3 +1,4 @@
+import asyncio
 import json
 from pathlib import Path
 
@@ -41,18 +42,27 @@ async def extract_feedback(transcript: str) -> ExtractionResult:
             },
         ],
     }
-    try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(45, connect=8)) as client:
-            response = await client.post(
-                f"{settings.groq_base_url.rstrip('/')}/chat/completions",
-                headers={"Authorization": f"Bearer {settings.groq_api_key}"},
-                json=body,
-            )
-            response.raise_for_status()
-            raw = response.json()["choices"][0]["message"]["content"]
-            return ExtractionResult.model_validate_json(raw)
-    except (httpx.HTTPError, KeyError, ValueError) as exc:
-        raise ServiceUnavailable(f"Groq extraction failed: {type(exc).__name__}") from exc
+    for attempt in range(4):
+        try:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(45, connect=8)) as client:
+                response = await client.post(
+                    f"{settings.groq_base_url.rstrip('/')}/chat/completions",
+                    headers={"Authorization": f"Bearer {settings.groq_api_key}"},
+                    json=body,
+                )
+                if response.status_code == 429 and attempt < 3:
+                    await asyncio.sleep(2 * (attempt + 1))
+                    continue
+                response.raise_for_status()
+                raw = response.json()["choices"][0]["message"]["content"]
+                return ExtractionResult.model_validate_json(raw)
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 429 and attempt < 3:
+                await asyncio.sleep(2 * (attempt + 1))
+                continue
+            raise ServiceUnavailable(f"Groq extraction failed: {type(exc).__name__}") from exc
+        except (httpx.HTTPError, KeyError, ValueError) as exc:
+            raise ServiceUnavailable(f"Groq extraction failed: {type(exc).__name__}") from exc
 
 
 async def transcribe_audio(path: str, filename: str, content_type: str) -> tuple[str, str]:
