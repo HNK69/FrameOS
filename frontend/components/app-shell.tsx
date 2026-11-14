@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { restoreProductionProject } from "../lib/production-history.mjs";
-import { Activity, ArrowDownRight, ArrowRight, AudioLines, Bell, BrainCircuit, Check, CheckCircle2, ChevronDown, CircleHelp, Clock3, FileAudio2, FileText, FolderKanban, LayoutDashboard, LockKeyhole, LogOut, MoreHorizontal, Plus, Radio, Search, ShieldCheck, Sparkles, Upload, UsersRound, WandSparkles, X, Zap } from "lucide-react";
+import { Activity, ArrowDownRight, ArrowRight, AudioLines, Bell, BrainCircuit, Check, CheckCircle2, ChevronDown, CircleHelp, Clock3, ExternalLink, FileAudio2, FileText, FolderKanban, LayoutDashboard, LockKeyhole, LogOut, MoreHorizontal, Plus, Radio, Search, ShieldCheck, Sparkles, Upload, UsersRound, WandSparkles, X, Zap } from "lucide-react";
 import { api, json } from "@/lib/api";
 import { ProductionWorkspace } from "./production-workspace";
 import { ProductionAnalytics } from "./production-analytics";
@@ -77,7 +77,7 @@ function Clients({clients,refresh,notify}:{clients:Client[];refresh:()=>void;not
   const shown=clients.filter(c=>(c.name+c.brand+c.industry).toLowerCase().includes(query.toLowerCase()));
   return <section className="panel directory-panel"><div className="toolbar"><div className="search-box"><Search size={15}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search clients"/></div><button className="primary-button" onClick={()=>{setEditingId(null);setForm({name:"",brand:"",industry:"",description:""});setOpen(x=>!x)}}><Plus size={16}/> Add client</button></div>
     {open&&<form className="create-form" onSubmit={save}><div className="form-grid"><label>Client name<input required maxLength={160} value={form.name} onChange={e=>setForm({...form,name:e.target.value})} placeholder="Studio or client name"/></label><label>Brand<input maxLength={160} value={form.brand} onChange={e=>setForm({...form,brand:e.target.value})} placeholder="Brand name"/></label><label>Industry<input maxLength={120} value={form.industry} onChange={e=>setForm({...form,industry:e.target.value})} placeholder="Industry"/></label><label>Description<input maxLength={5000} value={form.description} onChange={e=>setForm({...form,description:e.target.value})} placeholder="Context about the client"/></label></div><button className="primary-button" disabled={busy}>{busy?"Saving…":"Save client"}</button></form>}
-    {shown.length?<div className="client-grid">{shown.map(c=><article className="client-card" key={c.id}><div className="client-card-top"><div className="client-monogram large">{c.name.slice(0,1).toUpperCase()}</div><button className="icon-button" onClick={()=>edit(c)} title={`Edit ${c.name}`}>Edit</button><button className="icon-button" onClick={()=>remove(c)} title="Delete client and offboard memory"><X size={15}/></button></div><h3>{c.name}</h3><p>{c.brand||c.industry||"Client profile"}</p><div className="client-card-metrics"><span><FolderKanban size={14}/>{c.projects_count} projects</span><span><BrainCircuit size={14}/>{c.memories_retained} memories</span></div><div className="bank-status"><i className={c.memory_status==="ready"?"status-ready":"status-off"}/>{c.memory_status==="ready"?"Hindsight bank connected":"Memory service unavailable"}</div><Link href={`/production?client=${c.id}`} className="outline-action">Start production <ArrowRight size={14}/></Link></article>)}</div>:<Empty title={query?"No matching clients":"Your client intelligence starts here"} body={query?"Try another client or brand name.":"Create a client profile to establish its isolated memory bank and start a project."} action={!query&&<button className="small-action" onClick={()=>setOpen(true)}>Create your first client <ArrowRight size={13}/></button>}/>}
+    {shown.length?<div className="client-grid">{shown.map(c=><article className="client-card" key={c.id}><div className="client-card-top"><div className="client-monogram large">{c.name.slice(0,1).toUpperCase()}</div><button className="icon-button" onClick={()=>edit(c)} title={`Edit ${c.name}`}>Edit</button><button className="icon-button" onClick={()=>remove(c)} title="Delete client and offboard memory"><X size={15}/></button></div><h3>{c.name}</h3><p>{c.brand||c.industry||"Client profile"}</p><div className="client-card-metrics"><span><FolderKanban size={14}/>{c.projects_count} projects</span><span><BrainCircuit size={14}/>{c.memories_retained} memories</span></div><div className="bank-status"><i className={c.memory_status==="ready"?"status-ready":"status-off"}/>{c.memory_status==="ready"?"Hindsight bank connected":"Memory service unavailable"}</div><div style={{display:"flex",gap:"6px"}}><Link href={`/production?client=${c.id}`} className="outline-action">Start production <ArrowRight size={14}/></Link><Link href={`/portal`} target="_blank" className="outline-action" title="Open Client Portal"><ExternalLink size={14}/> Portal</Link></div></article>)}</div>:<Empty title={query?"No matching clients":"Your client intelligence starts here"} body={query?"Try another client or brand name.":"Create a client profile to establish its isolated memory bank and start a project."} action={!query&&<button className="small-action" onClick={()=>setOpen(true)}>Create your first client <ArrowRight size={13}/></button>}/>}
   </section>
 }
 
@@ -106,9 +106,13 @@ function Projects({clients,projects,tasks=[],refresh,notify}:{clients:Client[];p
         <div className="row-controls">
           <select value={p.status} onChange={e=>setStatus(p,e.target.value)} aria-label={`Set ${p.name} status`}>
             <option value="active">Active</option>
+            <option value="in_review">In Review</option>
             <option value="completed">Completed</option>
             <option value="archived">Archived</option>
           </select>
+          <Link className="row-link" href={`/portal/projects/${p.id}`} target="_blank" title="Open in Client Portal">
+            <ExternalLink size={14}/>
+          </Link>
           <Link className="row-link" href={`/production?project=${p.id}`} title="Open production">
             <ArrowRight size={15}/>
           </Link>

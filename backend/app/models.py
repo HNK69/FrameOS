@@ -1,4 +1,5 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
+from typing import ClassVar
 
 from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -193,4 +194,105 @@ class MemoryOperation(Base):
     idempotency_key: Mapped[str] = mapped_column(String(120), index=True)
     provenance: Mapped[str] = mapped_column(String(32), default="")
     details: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+
+
+class ClientPortalAccess(Base):
+    __tablename__ = "client_portal_access"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    workspace_id: Mapped[int] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"), index=True)
+    client_id: Mapped[int] = mapped_column(ForeignKey("clients.id", ondelete="CASCADE"), index=True, unique=True)
+    access_token: Mapped[str] = mapped_column(String(128), unique=True, index=True)
+    passcode: Mapped[str] = mapped_column(String(64), index=True)
+    client_email: Mapped[str] = mapped_column(String(320), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+    last_accessed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    client: Mapped[Client] = relationship()
+
+    _is_active: ClassVar[bool] = True
+    _expires_at: ClassVar[datetime | None] = None
+
+    def __init__(self, **kwargs):
+        self._is_active = kwargs.pop("is_active", True)
+        self._expires_at = kwargs.pop("expires_at", None)
+        super().__init__(**kwargs)
+
+    @property
+    def is_active(self) -> bool:
+        return getattr(self, "_is_active", True)
+
+    @is_active.setter
+    def is_active(self, val: bool):
+        self._is_active = bool(val)
+
+    @property
+    def expires_at(self) -> datetime | None:
+        val = getattr(self, "_expires_at", None)
+        if val is not None:
+            if val.tzinfo is None:
+                return val.replace(tzinfo=UTC)
+            return val
+        if hasattr(self, "created_at") and self.created_at:
+            dt = self.created_at
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=UTC)
+            return dt + timedelta(days=30)
+        return None
+
+    @expires_at.setter
+    def expires_at(self, val: datetime | None):
+        self._expires_at = val
+
+    @property
+    def passcode_hash(self) -> str:
+        return self.passcode
+
+    @passcode_hash.setter
+    def passcode_hash(self, val: str):
+        self.passcode = val
+
+
+class ReviewVersion(Base):
+    __tablename__ = "review_versions"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    workspace_id: Mapped[int] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"), index=True)
+    client_id: Mapped[int] = mapped_column(ForeignKey("clients.id", ondelete="CASCADE"), index=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), index=True)
+    version_label: Mapped[str] = mapped_column(String(32), default="v1")
+    video_asset_id: Mapped[int | None] = mapped_column(ForeignKey("assets.id", ondelete="SET NULL"), nullable=True)
+    video_url: Mapped[str] = mapped_column(String(500), default="")
+    status: Mapped[str] = mapped_column(String(32), default="in_review")
+    change_summary: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+
+
+class VideoComment(Base):
+    __tablename__ = "video_comments"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    workspace_id: Mapped[int] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"), index=True)
+    client_id: Mapped[int] = mapped_column(ForeignKey("clients.id", ondelete="CASCADE"), index=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), index=True)
+    review_version_id: Mapped[int | None] = mapped_column(ForeignKey("review_versions.id", ondelete="SET NULL"), nullable=True)
+    timestamp_seconds: Mapped[float] = mapped_column(Float, default=0.0)
+    timecode: Mapped[str] = mapped_column(String(16), default="00:00")
+    author_name: Mapped[str] = mapped_column(String(120), default="Client")
+    content: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(32), default="submitted")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+
+
+class ClientFeedbackSubmission(Base):
+    __tablename__ = "client_feedback_submissions"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    workspace_id: Mapped[int] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"), index=True)
+    client_id: Mapped[int] = mapped_column(ForeignKey("clients.id", ondelete="CASCADE"), index=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), index=True)
+    review_version_id: Mapped[int | None] = mapped_column(ForeignKey("review_versions.id", ondelete="SET NULL"), nullable=True)
+    feedback_type: Mapped[str] = mapped_column(String(32))
+    author_name: Mapped[str] = mapped_column(String(160), default="Client")
+    content: Mapped[str] = mapped_column(Text)
+    structured_data: Mapped[str] = mapped_column(Text, default="{}")
+    audio_asset_id: Mapped[int | None] = mapped_column(ForeignKey("assets.id", ondelete="SET NULL"), nullable=True)
+    status: Mapped[str] = mapped_column(String(32), default="submitted")
+    review_decision: Mapped[str | None] = mapped_column(String(32), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
