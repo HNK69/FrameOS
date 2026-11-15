@@ -27,6 +27,9 @@ FRONTEND_DIR = ROOT_DIR / "frontend"
 ACTIVE_DB = BACKEND_DIR / "frameops.db"
 TEST_DB = BACKEND_DIR / ".frameops_e2e.db"
 
+# Canonical baseline database hash post-migration
+BASELINE_DB_SHA = "c1ad5da27f48ae22e9aacd8f509847da64171ba831f400d7bf19e9882de3724f"
+
 
 def calculate_sha256(path: Path) -> str:
     """Compute SHA-256 digest of a file."""
@@ -89,11 +92,12 @@ def verify_active_db_invariants(expected_sha: str | None = None) -> None:
     if not ACTIVE_DB.is_file():
         raise FileNotFoundError(f"Active database not found at {ACTIVE_DB}")
 
+    target_sha = expected_sha or BASELINE_DB_SHA
     current_sha = calculate_sha256(ACTIVE_DB)
-    if expected_sha and expected_sha != current_sha:
+    if current_sha != target_sha:
         raise RuntimeError(
             f"FATAL INTEGRITY VIOLATION: Active database {ACTIVE_DB} WAS MODIFIED! "
-            f"Initial: {expected_sha}, Final: {current_sha}"
+            f"Expected: {target_sha}, Actual: {current_sha}"
         )
 
     conn = sqlite3.connect(ACTIVE_DB)
@@ -133,7 +137,10 @@ def verify_active_db_invariants(expected_sha: str | None = None) -> None:
         if total_records != 144:
             raise RuntimeError(f"FATAL: Expected 144 total baseline records, found {total_records}")
 
-        print(f"Active database integrity verified: SHA-256 untouched and all 144 baseline records preserved.")
+        print(
+            f"Active database integrity verified: SHA-256 untouched ({current_sha[:8]}...) "
+            f"and all 144 baseline records preserved."
+        )
     finally:
         conn.close()
 
@@ -295,11 +302,44 @@ def main() -> int:
         print("Dry run completed. Configuration and active database invariants (SHA-256 and 144 baseline records) are valid.")
         return 0
 
+    python_exe = BACKEND_DIR / ".venv" / "Scripts" / "python.exe"
+    if not python_exe.is_file():
+        python_exe = Path(sys.executable)
+
+    pytest_exe = BACKEND_DIR / ".venv" / "Scripts" / "pytest.exe"
+    if not pytest_exe.is_file():
+        pytest_exe = python_exe.parent / "pytest.exe"
+
+    api_suite = BACKEND_DIR / "tests" / "e2e" / "tier4_lifecycle" / "test_tier4_lifecycle_api.py"
+    playwright_script = BACKEND_DIR / "test_playwright_battery.py"
+    browser_suite = BACKEND_DIR / "tests" / "e2e" / "tier4_lifecycle" / "test_tier4_lifecycle_browser.py"
+
+    # API-only execution: Runs pytest directly in-process without spinning up background uvicorn/Next.js
+    if args.api_only:
+        print("=================================================================")
+        print(" FRAMEOPS Tier 4 API Lifecycle Test Runner (In-Process)")
+        print(f" Live Services: {'Enabled' if args.live else 'Offline Mocks'}")
+        print("=================================================================")
+        verify_active_db_invariants()
+
+        test_env = os.environ.copy()
+        if args.live:
+            test_env["FRAMEOPS_LIVE_SERVICES"] = "1"
+
+        print(f"Executing Tier 4 API Lifecycle test suite: {api_suite}...")
+        proc = subprocess.run([str(pytest_exe), str(api_suite), "-v"], cwd=BACKEND_DIR, env=test_env)
+
+        # Re-verify active database invariants post test run
+        verify_active_db_invariants()
+        print(f"API Lifecycle test suite completed with exit code: {proc.returncode}")
+        return proc.returncode
+
+    # Server-managed execution (Full Browser & API or Browser-only)
     print("=================================================================")
     print(" FRAMEOPS Tier 4 End-to-End Lifecycle Test Runner")
     print(f" Backend Port:  {args.backend_port}")
-    print(f" Frontend Port: {args.frontend_port if not args.api_only else 'N/A'}")
-    print(f" Mode:          {'API only' if args.api_only else ('Browser only' if args.browser_only else 'Full Browser & API')}")
+    print(f" Frontend Port: {args.frontend_port}")
+    print(f" Mode:          {'Browser only' if args.browser_only else 'Full Browser & API'}")
     print(f" Live Services: {'Enabled' if args.live else 'Offline Mocks'}")
     print("=================================================================")
 
@@ -307,24 +347,12 @@ def main() -> int:
         with E2EServerManager(
             backend_port=args.backend_port,
             frontend_port=args.frontend_port,
-            api_only=args.api_only,
+            api_only=False,
             timeout=args.timeout,
             cleanup_db=not args.no_cleanup,
             live_mode=args.live,
         ):
             print("\nExecuting test suites against running servers...")
-
-            python_exe = BACKEND_DIR / ".venv" / "Scripts" / "python.exe"
-            if not python_exe.is_file():
-                python_exe = Path(sys.executable)
-
-            pytest_exe = BACKEND_DIR / ".venv" / "Scripts" / "pytest.exe"
-            if not pytest_exe.is_file():
-                pytest_exe = python_exe.parent / "pytest.exe"
-
-            api_suite = BACKEND_DIR / "tests" / "e2e" / "tier4_lifecycle" / "test_tier4_lifecycle_api.py"
-            playwright_script = BACKEND_DIR / "test_playwright_battery.py"
-            browser_suite = BACKEND_DIR / "tests" / "e2e" / "tier4_lifecycle" / "test_tier4_lifecycle_browser.py"
 
             # Pass isolated DATABASE_URL and server URLs to test subprocesses
             test_env = os.environ.copy()
@@ -336,14 +364,8 @@ def main() -> int:
 
             ret_code = 0
 
-            # 1. API-only execution
-            if args.api_only:
-                print(f"Executing Tier 4 API Lifecycle test suite: {api_suite}...")
-                proc = subprocess.run([str(pytest_exe), str(api_suite), "-v"], cwd=BACKEND_DIR, env=test_env)
-                ret_code = proc.returncode
-
-            # 2. Browser-only execution
-            elif args.browser_only:
+            # 1. Browser-only execution
+            if args.browser_only:
                 if playwright_script.is_file():
                     print(f"Running Playwright battery: {playwright_script}...")
                     proc = subprocess.run([str(python_exe), str(playwright_script)], cwd=BACKEND_DIR, env=test_env)
@@ -353,15 +375,15 @@ def main() -> int:
                     proc_b = subprocess.run([str(pytest_exe), str(browser_suite), "-v"], cwd=BACKEND_DIR, env=test_env)
                     ret_code = proc_b.returncode
 
-            # 3. Default: Both API and Browser suites
+            # 2. Default: Both API and Browser suites
             else:
                 print(f"Executing Tier 4 API Lifecycle test suite: {api_suite}...")
                 proc_api = subprocess.run([str(pytest_exe), str(api_suite), "-v"], cwd=BACKEND_DIR, env=test_env)
                 ret_code = proc_api.returncode
 
-                if ret_code == 0 and playwright_script.is_file():
-                    print(f"\nRunning Playwright battery: {playwright_script}...")
-                    proc_pw = subprocess.run([str(python_exe), str(playwright_script)], cwd=BACKEND_DIR, env=test_env)
+                if ret_code == 0 and browser_suite.is_file():
+                    print(f"\nRunning Browser lifecycle suite: {browser_suite}...")
+                    proc_pw = subprocess.run([str(pytest_exe), str(browser_suite), "-v"], cwd=BACKEND_DIR, env=test_env)
                     ret_code = proc_pw.returncode
 
             print(f"Test suite execution completed with exit code: {ret_code}")
