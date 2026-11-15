@@ -11,12 +11,13 @@ from __future__ import annotations
 import argparse
 import hashlib
 import os
+from pathlib import Path
 import shutil
 import socket
+import sqlite3
 import subprocess
 import sys
 import time
-from pathlib import Path
 
 # Paths
 SCRIPTS_DIR = Path(__file__).resolve().parent
@@ -67,8 +68,8 @@ def kill_process_tree(pid: int) -> None:
 
 def wait_for_health(url: str, timeout: float = 45.0, interval: float = 0.5) -> bool:
     """Poll URL until a response status < 500 is returned or timeout expires."""
-    import urllib.request
     import urllib.error
+    import urllib.request
 
     start_time = time.time()
     while time.time() - start_time < timeout:
@@ -81,6 +82,60 @@ def wait_for_health(url: str, timeout: float = 45.0, interval: float = 0.5) -> b
             pass
         time.sleep(interval)
     return False
+
+
+def verify_active_db_invariants(expected_sha: str | None = None) -> None:
+    """Assert active DB hash unchanged, PRAGMA checks pass, and 144 baseline records intact."""
+    if not ACTIVE_DB.is_file():
+        raise FileNotFoundError(f"Active database not found at {ACTIVE_DB}")
+
+    current_sha = calculate_sha256(ACTIVE_DB)
+    if expected_sha and expected_sha != current_sha:
+        raise RuntimeError(
+            f"FATAL INTEGRITY VIOLATION: Active database {ACTIVE_DB} WAS MODIFIED! "
+            f"Initial: {expected_sha}, Final: {current_sha}"
+        )
+
+    conn = sqlite3.connect(ACTIVE_DB)
+    cur = conn.cursor()
+    try:
+        cur.execute("PRAGMA integrity_check")
+        integrity = cur.fetchall()
+        if integrity != [("ok",)]:
+            raise RuntimeError(f"FATAL: PRAGMA integrity_check failed on active DB: {integrity}")
+
+        cur.execute("PRAGMA foreign_key_check")
+        fk = cur.fetchall()
+        if fk != []:
+            raise RuntimeError(f"FATAL: PRAGMA foreign_key_check failed on active DB: {fk}")
+
+        baseline_counts = {
+            "users": 1,
+            "workspaces": 1,
+            "memberships": 1,
+            "clients": 9,
+            "projects": 13,
+            "transcripts": 16,
+            "processing_runs": 16,
+            "extracted_items": 56,
+            "memory_operations": 31,
+        }
+        total_records = 0
+        for tbl, expected in baseline_counts.items():
+            cur.execute(f'SELECT COUNT(*) FROM "{tbl}"')
+            actual = cur.fetchone()[0]
+            if actual != expected:
+                raise RuntimeError(
+                    f"FATAL: Record count mismatch in '{tbl}': expected {expected}, got {actual}"
+                )
+            total_records += actual
+
+        if total_records != 144:
+            raise RuntimeError(f"FATAL: Expected 144 total baseline records, found {total_records}")
+
+        print(f"Active database integrity verified: SHA-256 untouched and all 144 baseline records preserved.")
+    finally:
+        conn.close()
 
 
 class E2EServerManager:
@@ -208,21 +263,18 @@ class E2EServerManager:
             kill_process_tree(self.backend_proc.pid)
             self.backend_proc = None
 
-        # Verify active database was untouched
-        if self.initial_active_db_sha:
-            final_active_db_sha = calculate_sha256(ACTIVE_DB)
-            if self.initial_active_db_sha != final_active_db_sha:
-                print(f"[FATAL] Active database {ACTIVE_DB} WAS MODIFIED! Initial: {self.initial_active_db_sha}, Final: {final_active_db_sha}")
-            else:
-                print(f"Active database integrity verified: SHA-256 untouched ({self.initial_active_db_sha[:12]}...).")
-
-        # Cleanup isolated test database
-        if self.cleanup_db:
-            for ext in ("", "-wal", "-shm"):
-                p = Path(str(TEST_DB) + ext)
-                if p.is_file():
-                    p.unlink(missing_ok=True)
-            print("Isolated test database files removed.")
+        # Verify active database was untouched and all invariants hold
+        try:
+            if self.initial_active_db_sha:
+                verify_active_db_invariants(expected_sha=self.initial_active_db_sha)
+        finally:
+            # Cleanup isolated test database
+            if self.cleanup_db:
+                for ext in ("", "-wal", "-shm"):
+                    p = Path(str(TEST_DB) + ext)
+                    if p.is_file():
+                        p.unlink(missing_ok=True)
+                print("Isolated test database files removed.")
 
 
 def main() -> int:
@@ -238,14 +290,16 @@ def main() -> int:
     args = parser.parse_args()
 
     if args.dry_run:
-        print("Dry run completed. Configuration is valid.")
+        print("Dry run requested. Verifying active database invariants and configuration...")
+        verify_active_db_invariants()
+        print("Dry run completed. Configuration and active database invariants (SHA-256 and 144 baseline records) are valid.")
         return 0
 
     print("=================================================================")
     print(" FRAMEOPS Tier 4 End-to-End Lifecycle Test Runner")
     print(f" Backend Port:  {args.backend_port}")
     print(f" Frontend Port: {args.frontend_port if not args.api_only else 'N/A'}")
-    print(f" Mode:          {'API only' if args.api_only else 'Full Browser & API'}")
+    print(f" Mode:          {'API only' if args.api_only else ('Browser only' if args.browser_only else 'Full Browser & API')}")
     print(f" Live Services: {'Enabled' if args.live else 'Offline Mocks'}")
     print("=================================================================")
 
@@ -259,15 +313,56 @@ def main() -> int:
             live_mode=args.live,
         ):
             print("\nExecuting test suites against running servers...")
-            # If Playwright battery is present and not api_only, run it
-            playwright_script = BACKEND_DIR / "test_playwright_battery.py"
+
             python_exe = BACKEND_DIR / ".venv" / "Scripts" / "python.exe"
+            if not python_exe.is_file():
+                python_exe = Path(sys.executable)
+
+            pytest_exe = BACKEND_DIR / ".venv" / "Scripts" / "pytest.exe"
+            if not pytest_exe.is_file():
+                pytest_exe = python_exe.parent / "pytest.exe"
+
+            api_suite = BACKEND_DIR / "tests" / "e2e" / "tier4_lifecycle" / "test_tier4_lifecycle_api.py"
+            playwright_script = BACKEND_DIR / "test_playwright_battery.py"
+            browser_suite = BACKEND_DIR / "tests" / "e2e" / "tier4_lifecycle" / "test_tier4_lifecycle_browser.py"
+
+            # Pass isolated DATABASE_URL and server URLs to test subprocesses
+            test_env = os.environ.copy()
+            test_env["DATABASE_URL"] = f"sqlite:///{TEST_DB.resolve().as_posix()}"
+            test_env["BACKEND_URL"] = f"http://127.0.0.1:{args.backend_port}"
+            test_env["FRONTEND_URL"] = f"http://127.0.0.1:{args.frontend_port}"
+            if args.live:
+                test_env["FRAMEOPS_LIVE_SERVICES"] = "1"
 
             ret_code = 0
-            if not args.api_only and playwright_script.is_file():
-                print(f"Running Playwright battery: {playwright_script}...")
-                proc = subprocess.run([str(python_exe), str(playwright_script)], cwd=BACKEND_DIR)
+
+            # 1. API-only execution
+            if args.api_only:
+                print(f"Executing Tier 4 API Lifecycle test suite: {api_suite}...")
+                proc = subprocess.run([str(pytest_exe), str(api_suite), "-v"], cwd=BACKEND_DIR, env=test_env)
                 ret_code = proc.returncode
+
+            # 2. Browser-only execution
+            elif args.browser_only:
+                if playwright_script.is_file():
+                    print(f"Running Playwright battery: {playwright_script}...")
+                    proc = subprocess.run([str(python_exe), str(playwright_script)], cwd=BACKEND_DIR, env=test_env)
+                    ret_code = proc.returncode
+                if ret_code == 0 and browser_suite.is_file():
+                    print(f"Running Browser lifecycle suite: {browser_suite}...")
+                    proc_b = subprocess.run([str(pytest_exe), str(browser_suite), "-v"], cwd=BACKEND_DIR, env=test_env)
+                    ret_code = proc_b.returncode
+
+            # 3. Default: Both API and Browser suites
+            else:
+                print(f"Executing Tier 4 API Lifecycle test suite: {api_suite}...")
+                proc_api = subprocess.run([str(pytest_exe), str(api_suite), "-v"], cwd=BACKEND_DIR, env=test_env)
+                ret_code = proc_api.returncode
+
+                if ret_code == 0 and playwright_script.is_file():
+                    print(f"\nRunning Playwright battery: {playwright_script}...")
+                    proc_pw = subprocess.run([str(python_exe), str(playwright_script)], cwd=BACKEND_DIR, env=test_env)
+                    ret_code = proc_pw.returncode
 
             print(f"Test suite execution completed with exit code: {ret_code}")
             return ret_code

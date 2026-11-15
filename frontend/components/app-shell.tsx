@@ -50,7 +50,18 @@ export function AppShell({page}:{page:Page}) {
   const [authed,setAuthed]=useState(false); const [checking,setChecking]=useState(true);
   const [clients,setClients]=useState<Client[]>([]); const [projects,setProjects]=useState<Project[]>([]); const [tasks,setTasks]=useState<Task[]>([]); const [analytics,setAnalytics]=useState<any>(null); const [readiness,setReadiness]=useState<any>(null); const [user,setUser]=useState<any>(null);
   const [notice,setNotice]=useState(""); const [refresh,setRefresh]=useState(0); const [logoutBusy,setLogoutBusy]=useState(false);
-  useEffect(()=>{api("/api/me").then(v=>{setUser(v);setAuthed(true)}).catch(()=>setAuthed(false)).finally(()=>setChecking(false))},[]);
+  useEffect(()=>{
+    api("/api/me").then(v=>{
+      if (v && v.role === "client") {
+        setAuthed(false);
+      } else if (v && (v.role === "agency_owner" || v.role === "owner" || v.role === "agency_member" || v.role === "member")) {
+        setUser(v);
+        setAuthed(true);
+      } else {
+        setAuthed(false);
+      }
+    }).catch(()=>setAuthed(false)).finally(()=>setChecking(false));
+  },[]);
   useEffect(()=>{if(!authed)return; Promise.all([api<Client[]>("/api/clients"),api<Project[]>("/api/projects"),api<Task[]>("/api/tasks"),api("/api/analytics"),api("/api/ready")]).then(([c,p,t,a,r])=>{setClients(c);setProjects(p);setTasks(t);setAnalytics(a);setReadiness(r)}).catch(e=>setNotice(e.message))},[authed,refresh]);
   async function logout(){setLogoutBusy(true);try{await api("/api/auth/logout",json("POST"));setAuthed(false);setUser(null)}finally{setLogoutBusy(false)}}
   if(checking)return <main className="auth-screen"><div className="loading-line">Opening FRAMEOPS…</div></main>;

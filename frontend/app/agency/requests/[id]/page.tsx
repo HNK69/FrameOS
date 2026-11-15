@@ -116,18 +116,17 @@ export default function AgencyRequestDetailPage() {
     if (!msgInput.trim()) return;
     setSendingMsg(true);
     try {
-      const res = await fetch("/api/agency/messages", {
+      const res = await fetch(`/api/requests/${requestId}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({
-          request_id: Number(requestId),
           content: msgInput.trim(),
         }),
       });
       if (res.ok) {
         setMsgInput("");
-        const refreshed = await fetch(`/api/agency/requests/${requestId}/messages`, { credentials: "include" });
+        const refreshed = await fetch(`/api/requests/${requestId}/messages`, { credentials: "include" });
         if (refreshed.ok) setMessages(await refreshed.json());
       }
     } finally {
@@ -372,7 +371,7 @@ export default function AgencyRequestDetailPage() {
               disabled={sendingMsg || !msgInput.trim()}
               className="px-4 py-2 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white rounded-lg text-sm font-medium transition-colors"
             >
-              Send
+              Send Message
             </button>
           </form>
         </div>

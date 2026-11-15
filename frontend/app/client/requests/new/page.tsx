@@ -28,16 +28,29 @@ function NewRequestForm() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
+  useEffect(() => {
+    if (preAgencyId) {
+      setForm((f) => ({ ...f, agency_workspace_id: parseInt(preAgencyId) }));
+    }
+  }, [preAgencyId]);
+
   const handleSubmit = async (e: React.FormEvent, asDraft = false) => {
     e.preventDefault();
-    if (!form.agency_workspace_id) { setError("Please select an agency first."); return; }
+    const wsId = form.agency_workspace_id || (preAgencyId ? parseInt(preAgencyId) : 0);
+    if (!wsId) { setError("Please select an agency first."); return; }
     setLoading(true);
     setError("");
     try {
+      const payload = {
+        ...form,
+        agency_workspace_id: wsId,
+        deadline: form.deadline ? new Date(form.deadline).toISOString() : null,
+        status: asDraft ? "draft" : "submitted",
+      };
       const r = await fetch("/api/client/requests", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, status: asDraft ? "draft" : "submitted" }),
+        body: JSON.stringify(payload),
         credentials: "include",
       });
       if (!r.ok) {
