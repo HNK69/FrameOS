@@ -1,18 +1,19 @@
 # FRAMEOPS Project Status
 
-**Updated**: 2026-11-14 (Milestones 1–6 Completed, Verified & Ready for Checkpoint 2 Push Sign-Off)
+**Updated**: 2026-11-15 (Two-Sided Platform Architecture & Full-Stack Implementation Complete)
 
 ---
 
 ## Executive Summary
 
-All six milestones defined in the Master Implementation Plan have been executed, verified, and audited:
-- **Milestone 1 (Database Hardening)**: SQLite WAL mode and 5,000ms busy timeout enabled; active database successfully migrated to revision `a1b2c3d4e5f6`; all 144 pre-existing operational records preserved; safe timestamped backups preserved untouched.
-- **Milestone 2 (Security Remediation)**: Passwordless email login bypass completely eliminated (`HTTP 401`); Argon2 passcode hashing and unexpired token enforcement verified; global HTTP security headers and CORS `X-Portal-Token` configured; attachment downloads sanitized against SVG stored XSS.
-- **Milestone 3 (AI Pipeline Resiliency)**: Groq Whisper and extraction 429 exponential backoff retry active; sliding-window token chunking (`chunk_transcript_tokens` <=4,000 tokens) eliminates hard truncation on long transcripts; Hindsight graceful degradation fallback prevents run failure; client-confirmed feedback synchronizes with client tenant memory banks.
-- **Milestone 4 (Client Portal Integration)**: 284 lines of ported styling isolated under `.portal-*` selectors in `frontend/app/globals.css`; portal navigation links in `frontend/components/app-shell.tsx`; dynamic Next.js API `rewrites()` proxying to port 8001; all 8 Next.js routes compile cleanly.
-- **Milestone 5 (Feedback Pipeline & Workspace Bridge)**: `POST /api/agency/feedback/{id}/convert-task` with explicit `source="client_feedback"` provenance and query-based idempotency; `ProductionWorkspace` page-revisit hydration bug fixed with `restoreProductionProject`.
-- **Milestone 6 (QA, Multi-Tier Verification & Checkpoint 2 Protocol)**: Layer A automated test suites pass 100% (35 backend tests, 2 frontend unit tests, 8 routes built); Layer B live provider credentials and socket connectivity verified; Git pre-push synchronization executed with 0 remote divergence; all teammate and backup branches preserved intact. Ready for Checkpoint 2 user sign-off.
+FRAMEOPS has been completely expanded into a fully functional two-sided video production operations platform connecting clients and video-editing agencies:
+- **Milestone 0 (Audit & Gap Matrix)**: Analyzed existing agency-only routes and client review portal. Formulated the unified two-sided platform specification.
+- **Milestone 1 (Database Schema & Migration)**: Created Alembic migration `b2c3d4e5f6a7` adding `agency_profiles`, `client_profiles`, `project_requests`, `proposals`, and `project_messages`. Active database migrated safely; all 144 baseline records preserved; zero integrity violations.
+- **Milestone 2 (Role-Aware Auth & RBAC)**: Implemented dual public registration (`/api/auth/register/client`, `/api/auth/register/agency`), role-aware login, and strict tenant RBAC guards (`require_client_role`, `require_agency_role`).
+- **Milestone 3 (Agency Discovery & Catalog)**: Public catalog search and filtering (`/api/discovery/agencies`), profile management with publication validation rules, and owner preview modes.
+- **Milestone 4 (Project Briefs & Proposals)**: Client brief submission, agency inbox management, proposal creation and acceptance workflow, automatic project activation, and direct thread messaging.
+- **Milestone 5 (Frontend Two-Sided Platform)**: Public landing page at `/`, dedicated client experience (`/client/*`), agency dashboard and profile suite (`/agency/*`), and seamless integration with existing production workspace. All 18 Next.js routes compile cleanly.
+- **Verification & Test Battery**: 362 backend tests pass (134 in M1–M4 + full E2E and unit suites); 2 frontend tests pass; clean production build. Ready for final Git push authorization.
 
 ---
 

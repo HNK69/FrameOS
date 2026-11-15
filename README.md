@@ -2,7 +2,37 @@
 
 **Remember Every Client. Perfect Every Project.**
 
-FRAMEOPS is an intelligent creative production operations and client review workspace. It keeps a dedicated Hindsight memory bank for each client, turns unstructured transcript feedback into evidence-backed DaVinci Resolve production tasks, and delivers a branded client review portal for timestamped video feedback and approval workflows.
+FRAMEOPS is a two-sided video production operations platform connecting clients and video-editing agencies. It provides two distinct, fully functional experiences:
+
+1. **Client Platform**: Where clients register, discover agencies in a public catalog, submit structured project briefs, upload media assets, communicate with agencies, review proposals, track production, and approve deliverables.
+2. **Agency Platform**: Where agencies register, manage public profiles and portfolios, receive project requests, submit proposals, track clients, process feedback with AI, and manage production workflows.
+
+---
+
+## Architecture & Product Capabilities
+
+### 1. Two-Sided Authentication & Role-Aware RBAC
+- **Independent Registration**: Dedicated registration flows for clients (`POST /api/auth/register/client`) and agencies (`POST /api/auth/register/agency`).
+- **Role-Aware Sessions**: Single login endpoint (`POST /api/auth/login`) dynamically issues persona tokens (`role="client"` or `role="agency_owner"` / `role="agency_member"`).
+- **Argon2id Password Security**: Password hashing via Argon2id (`pwdlib`) with secure HTTP-only cookies (`frameops_client_session` and `frameops_session`).
+
+### 2. Agency Discovery & Profile Catalog
+- **Public Catalog**: `GET /api/discovery/agencies` allows clients to search, filter by specialization and services, and browse agency portfolios.
+- **Publishing Safeguards**: Agencies must complete minimum requirements (description, contact email, at least one specialization and service) before publishing (`POST /api/agency/profile/publish`).
+- **Unpublished Isolation**: Unpublished agencies are strictly hidden from public discovery and return 404 to non-members.
+
+### 3. Project Briefs, Requests & Proposals
+- **Structured Project Briefs**: Clients submit detailed briefs (`POST /api/client/requests`) with target platform, aspect ratio, duration, budget, deadlines, and editing instructions.
+- **Agency Inbox & Review**: Agencies receive briefs in their inbox (`GET /api/agency/requests`), with client drafts automatically hidden.
+- **Proposals & Turnaround**: Agencies submit custom proposals (`POST /api/agency/requests/{id}/proposals`) with scope, turnaround days, and deliverables summary.
+- **Proposal Acceptance & Project Activation**: When a client accepts a proposal (`POST /api/client/requests/{id}/proposals/{id}/accept`), other proposals are declined and an active production project is automatically created in the agency workspace.
+- **Direct Messaging**: Chronological clarification thread (`/api/requests/{id}/messages`) between client and agency.
+
+### 4. Video Production Operations & Adaptive Memory
+- **Dedicated Memory Banks**: Isolated Hindsight memory bank for each client.
+- **AI Feedback Extraction**: Groq Whisper and LLM extraction turning feedback into structured requests.
+- **DaVinci Resolve Task Synthesis**: OpenClaw gateway generating actionable editing instructions.
+- **Review Portal**: Video playback with timestamped comments, versioning, and client decisions.
 
 ---
 
