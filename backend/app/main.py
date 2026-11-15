@@ -29,19 +29,21 @@ from .models import (
     Workspace,
     now_utc,
 )
+from .routers.agency_profile import router as agency_profile_router
+from .routers.auth import router as auth_router
+from .routers.discovery import router as discovery_router
 from .routers.feedback import router as feedback_router
 from .routers.portal import router as portal_router
 from .routers.production_intelligence import router as production_router
+from .routers.project_requests import router as project_requests_router
 from .schemas import (
     ClientInput,
     FeedbackInput,
-    LoginInput,
     ProcessInput,
     ProjectInput,
     RetainInput,
-    SetupInput,
 )
-from .security import current_identity, hash_password, issue_token, verify_password
+from .security import current_identity
 from .services import groq, hindsight, openclaw
 from .services.production_analytics import get_production_analytics
 
@@ -55,9 +57,13 @@ async def lifespan(_app: FastAPI):
 
 
 app = FastAPI(title="FRAMEOPS API", version="0.1.0", lifespan=lifespan)
+app.include_router(auth_router)
+app.include_router(agency_profile_router)
+app.include_router(discovery_router)
 app.include_router(feedback_router)
 app.include_router(production_router)
 app.include_router(portal_router)
+app.include_router(project_requests_router)
 origins = [origin.strip() for origin in settings.cors_origins.split(",") if origin.strip()]
 app.add_middleware(CORSMiddleware, allow_origins=origins, allow_credentials=True,
                    allow_methods=["GET", "POST", "PATCH", "DELETE"],
@@ -152,57 +158,6 @@ def ready(db: Session = Depends(get_db)):
     }
     status = "ready" if database == "ready" and all(v == "configured" for v in integrations.values()) else "degraded"
     return {"status": status, "database": database, "integrations": integrations}
-
-
-@app.get("/api/auth/status")
-def auth_status(db: Session = Depends(get_db)):
-    return {"setup_required": db.query(User).count() == 0, "auth_ready": bool(settings.auth_secret)}
-
-
-def _set_auth_cookie(response: Response, token: str):
-    response.set_cookie("frameops_session", token, max_age=settings.auth_token_minutes * 60,
-                        httponly=True, secure=settings.auth_cookie_secure, samesite="lax", path="/")
-
-
-@app.post("/api/auth/setup")
-def setup(data: SetupInput, response: Response, db: Session = Depends(get_db)):
-    if not settings.auth_secret:
-        raise HTTPException(503, "Set AUTH_SECRET before creating the workspace owner")
-    if db.query(User).count():
-        raise HTTPException(409, "Initial owner is already configured")
-    user = User(email=data.email.lower(), password_hash=hash_password(data.password))
-    workspace = Workspace(name=data.workspace_name.strip())
-    db.add_all([user, workspace])
-    db.flush()
-    member = Membership(workspace_id=workspace.id, user_id=user.id, role="owner")
-    db.add(member)
-    db.commit()
-    _set_auth_cookie(response, issue_token(user, member))
-    return {"workspace": {"id": workspace.id, "name": workspace.name}}
-
-
-@app.post("/api/auth/login")
-def login(data: LoginInput, response: Response, db: Session = Depends(get_db)):
-    user = db.scalar(select(User).where(User.email == data.email.lower()))
-    if not user or not verify_password(data.password, user.password_hash):
-        raise HTTPException(401, "Invalid email or password")
-    member = db.scalar(select(Membership).where(Membership.user_id == user.id).order_by(Membership.id))
-    if not member:
-        raise HTTPException(403, "No workspace membership")
-    _set_auth_cookie(response, issue_token(user, member))
-    return {"workspace": {"id": member.workspace_id, "name": member.workspace.name}}
-
-
-@app.post("/api/auth/logout")
-def logout(response: Response):
-    response.delete_cookie("frameops_session", path="/", httponly=True, secure=settings.auth_cookie_secure, samesite="lax")
-    return {"logged_out": True}
-
-
-@app.get("/api/me")
-def me(identity=Depends(current_identity)):
-    user, workspace_id, role = identity
-    return {"id": user.id, "email": user.email, "workspace_id": workspace_id, "role": role}
 
 
 @app.get("/api/clients")

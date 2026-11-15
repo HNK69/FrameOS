@@ -1,3 +1,4 @@
+import json
 from datetime import UTC, datetime, timedelta
 from typing import ClassVar
 
@@ -16,7 +17,17 @@ class User(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     email: Mapped[str] = mapped_column(String(320), unique=True, index=True)
     password_hash: Mapped[str] = mapped_column(String(255))
+    full_name: Mapped[str] = mapped_column(String(160), default="", server_default="")
+    role: Mapped[str] = mapped_column(String(32), default="agency_owner", server_default="agency_owner", index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+
+    # Relationships
+    client_profile: Mapped["ClientProfile | None"] = relationship(back_populates="user", uselist=False, cascade="all, delete-orphan")
+    project_requests: Mapped[list["ProjectRequest"]] = relationship(
+        back_populates="client_user",
+        foreign_keys="[ProjectRequest.client_user_id]",
+        cascade="all, delete-orphan",
+    )
 
 
 class Workspace(Base):
@@ -25,6 +36,7 @@ class Workspace(Base):
     name: Mapped[str] = mapped_column(String(160))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
     memberships: Mapped[list["Membership"]] = relationship(back_populates="workspace", cascade="all, delete-orphan")
+    agency_profile: Mapped["AgencyProfile | None"] = relationship(back_populates="workspace", uselist=False, cascade="all, delete-orphan")
 
 
 class Membership(Base):
@@ -60,7 +72,9 @@ class Project(Base):
     status: Mapped[str] = mapped_column(String(24), default="active")
     due_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+    request_id: Mapped[int | None] = mapped_column(ForeignKey("project_requests.id", ondelete="SET NULL"), nullable=True, index=True, default=None)
     client: Mapped[Client] = relationship()
+    request: Mapped["ProjectRequest | None"] = relationship(back_populates="project")
 
 
 class Transcript(Base):
@@ -209,24 +223,40 @@ class ClientPortalAccess(Base):
     last_accessed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     client: Mapped[Client] = relationship()
 
-    _is_active: ClassVar[bool] = True
-    _expires_at: ClassVar[datetime | None] = None
+    _active_states: ClassVar[dict[str, bool]] = {}
+    _override_expires: ClassVar[dict[str, datetime]] = {}
 
     def __init__(self, **kwargs):
-        self._is_active = kwargs.pop("is_active", True)
-        self._expires_at = kwargs.pop("expires_at", None)
+        is_active = kwargs.pop("is_active", None)
+        expires_at = kwargs.pop("expires_at", None)
         super().__init__(**kwargs)
+        if is_active is not None and getattr(self, "access_token", None):
+            ClientPortalAccess._active_states[self.access_token] = bool(is_active)
+        if expires_at is not None and getattr(self, "access_token", None):
+            ClientPortalAccess._override_expires[self.access_token] = expires_at
 
     @property
     def is_active(self) -> bool:
+        tok = getattr(self, "access_token", None)
+        if tok and tok in ClientPortalAccess._active_states:
+            return ClientPortalAccess._active_states[tok]
         return getattr(self, "_is_active", True)
 
     @is_active.setter
     def is_active(self, val: bool):
+        tok = getattr(self, "access_token", None)
+        if tok:
+            ClientPortalAccess._active_states[tok] = bool(val)
         self._is_active = bool(val)
 
     @property
     def expires_at(self) -> datetime | None:
+        tok = getattr(self, "access_token", None)
+        if tok and tok in ClientPortalAccess._override_expires:
+            val = ClientPortalAccess._override_expires[tok]
+            if val.tzinfo is None:
+                return val.replace(tzinfo=UTC)
+            return val
         val = getattr(self, "_expires_at", None)
         if val is not None:
             if val.tzinfo is None:
@@ -241,6 +271,12 @@ class ClientPortalAccess(Base):
 
     @expires_at.setter
     def expires_at(self, val: datetime | None):
+        tok = getattr(self, "access_token", None)
+        if tok:
+            if val is not None:
+                ClientPortalAccess._override_expires[tok] = val
+            else:
+                ClientPortalAccess._override_expires.pop(tok, None)
         self._expires_at = val
 
     @property
@@ -296,3 +332,129 @@ class ClientFeedbackSubmission(Base):
     status: Mapped[str] = mapped_column(String(32), default="submitted")
     review_decision: Mapped[str | None] = mapped_column(String(32), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+
+
+class AgencyProfile(Base):
+    __tablename__ = "agency_profiles"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    workspace_id: Mapped[int] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"), unique=True, index=True)
+    tagline: Mapped[str] = mapped_column(String(255), default="", server_default="")
+    description: Mapped[str] = mapped_column(Text, default="", server_default="")
+    specializations: Mapped[str] = mapped_column(Text, default="[]", server_default="[]")
+    services: Mapped[str] = mapped_column(Text, default="[]", server_default="[]")
+    portfolio: Mapped[str] = mapped_column(Text, default="[]", server_default="[]")
+    contact_email: Mapped[str] = mapped_column(String(320), default="", server_default="")
+    contact_phone: Mapped[str] = mapped_column(String(64), default="", server_default="")
+    website: Mapped[str] = mapped_column(String(255), default="", server_default="")
+    is_published: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0", index=True)
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
+
+    workspace: Mapped["Workspace"] = relationship(back_populates="agency_profile")
+
+    @property
+    def specializations_list(self) -> list[str]:
+        try:
+            data = json.loads(self.specializations) if self.specializations else []
+            return data if isinstance(data, list) else []
+        except Exception:
+            return []
+
+    @property
+    def services_list(self) -> list[str]:
+        try:
+            data = json.loads(self.services) if self.services else []
+            return data if isinstance(data, list) else []
+        except Exception:
+            return []
+
+    @property
+    def portfolio_list(self) -> list[dict]:
+        try:
+            data = json.loads(self.portfolio) if self.portfolio else []
+            return data if isinstance(data, list) else []
+        except Exception:
+            return []
+
+
+class ClientProfile(Base):
+    __tablename__ = "client_profiles"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), unique=True, index=True)
+    company_name: Mapped[str] = mapped_column(String(160), default="", server_default="")
+    industry: Mapped[str] = mapped_column(String(120), default="", server_default="")
+    brand_guidelines: Mapped[str] = mapped_column(Text, default="", server_default="")
+    website: Mapped[str] = mapped_column(String(255), default="", server_default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
+
+    user: Mapped["User"] = relationship(back_populates="client_profile")
+
+
+class ProjectRequest(Base):
+    __tablename__ = "project_requests"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    client_user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    agency_workspace_id: Mapped[int] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"), index=True)
+    title: Mapped[str] = mapped_column(String(200))
+    description: Mapped[str] = mapped_column(Text, default="", server_default="")
+    video_type: Mapped[str] = mapped_column(String(80), default="", server_default="")
+    target_platform: Mapped[str] = mapped_column(String(80), default="", server_default="")
+    target_duration: Mapped[str] = mapped_column(String(80), default="", server_default="")
+    aspect_ratio: Mapped[str] = mapped_column(String(32), default="", server_default="")
+    editing_requirements: Mapped[str] = mapped_column(Text, default="", server_default="")
+    creative_direction: Mapped[str] = mapped_column(Text, default="", server_default="")
+    reference_links: Mapped[str] = mapped_column(Text, default="[]", server_default="[]")
+    deliverables_format: Mapped[str] = mapped_column(String(120), default="", server_default="")
+    budget: Mapped[str] = mapped_column(String(80), default="", server_default="")
+    deadline: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    status: Mapped[str] = mapped_column(String(32), default="submitted", server_default="submitted", index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
+
+    client_user: Mapped["User"] = relationship(foreign_keys=[client_user_id], back_populates="project_requests")
+    agency_workspace: Mapped["Workspace"] = relationship(foreign_keys=[agency_workspace_id])
+    proposals: Mapped[list["Proposal"]] = relationship(back_populates="request", cascade="all, delete-orphan")
+    messages: Mapped[list["ProjectMessage"]] = relationship(back_populates="request", cascade="all, delete-orphan")
+    project: Mapped["Project | None"] = relationship(back_populates="request", uselist=False)
+
+    @property
+    def reference_links_list(self) -> list[str]:
+        try:
+            data = json.loads(self.reference_links) if self.reference_links else []
+            return data if isinstance(data, list) else []
+        except Exception:
+            return []
+
+
+class Proposal(Base):
+    __tablename__ = "proposals"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    request_id: Mapped[int] = mapped_column(ForeignKey("project_requests.id", ondelete="CASCADE"), index=True)
+    agency_workspace_id: Mapped[int] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"), index=True)
+    scope_description: Mapped[str] = mapped_column(Text, default="", server_default="")
+    estimated_days: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    estimated_delivery_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    deliverables_summary: Mapped[str] = mapped_column(Text, default="", server_default="")
+    status: Mapped[str] = mapped_column(String(32), default="pending", server_default="pending", index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
+
+    request: Mapped["ProjectRequest"] = relationship(back_populates="proposals")
+    agency_workspace: Mapped["Workspace"] = relationship(foreign_keys=[agency_workspace_id])
+
+
+class ProjectMessage(Base):
+    __tablename__ = "project_messages"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    request_id: Mapped[int | None] = mapped_column(ForeignKey("project_requests.id", ondelete="CASCADE"), nullable=True, index=True)
+    project_id: Mapped[int | None] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), nullable=True, index=True)
+    sender_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    sender_role: Mapped[str] = mapped_column(String(32))
+    content: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+
+    request: Mapped["ProjectRequest | None"] = relationship(back_populates="messages")
+    project: Mapped["Project | None"] = relationship()
+    sender: Mapped["User"] = relationship()

@@ -21,6 +21,10 @@ backend/app/__pycache__/
 backend/tests/__pycache__/
 backend/frameops.db
 frameops.db
+backend/frameops.db.backup_*
+backend/frameops_rehearse.db*
+backend/frameops.db-shm
+backend/frameops.db-wal
 backend/.live-workflow-check*.db
 backend/.live-workflow-check.log
 backend/api.*.log

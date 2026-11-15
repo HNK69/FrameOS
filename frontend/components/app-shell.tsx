@@ -16,7 +16,9 @@ type Task = { id:number; title:string; category:string; instruction:string; reso
 type Run = { id:number; status:string; stage:string; error:string; extractions:any[]; tasks:Task[]; memory_operations:any[] };
 
 const nav = [
-  { href:"/", key:"overview", label:"Overview", icon:LayoutDashboard },
+  { href:"/agency/dashboard", key:"overview", label:"Overview", icon:LayoutDashboard },
+  { href:"/agency/requests", key:"requests", label:"Requests", icon:FileText },
+  { href:"/agency/profile", key:"profile", label:"Profile", icon:Sparkles },
   { href:"/clients", key:"clients", label:"Clients", icon:UsersRound },
   { href:"/projects", key:"projects", label:"Projects", icon:FolderKanban },
   { href:"/production", key:"production", label:"Production", icon:AudioLines },

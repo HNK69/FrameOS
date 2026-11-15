@@ -1,6 +1,8 @@
 from datetime import datetime
+from typing import Any
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+import email_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, TypeAdapter, field_validator
 
 
 class InputModel(BaseModel):
@@ -173,3 +175,283 @@ class PortalCommentInput(InputModel):
     content: str = Field(min_length=1, max_length=5000)
     version_id: int | None = None
     author_name: str = Field(default="Client", max_length=120)
+
+
+# =============================================================================
+# Two-Sided Platform Schemas (Auth, Profiles, Requests, Proposals, Messages)
+# =============================================================================
+
+class ClientRegisterInput(InputModel):
+    email: EmailStr
+    password: str = Field(min_length=8, max_length=128)
+    full_name: str = Field(min_length=1, max_length=160)
+    company_name: str = Field(default="", max_length=160)
+
+
+class AgencyRegisterInput(InputModel):
+    email: EmailStr
+    password: str = Field(min_length=8, max_length=128)
+    full_name: str = Field(min_length=1, max_length=160)
+    agency_name: str = Field(min_length=2, max_length=160)
+
+
+class AuthResponse(BaseModel):
+    user_id: int
+    id: int | None = None
+    email: str
+    role: str
+    full_name: str = ""
+    company_name: str | None = None
+    workspace_id: int | None = None
+    workspace: dict | None = None
+
+    def model_post_init(self, __context: Any) -> None:
+        if self.id is None:
+            self.id = self.user_id
+
+
+class UserResponse(BaseModel):
+    id: int
+    user_id: int | None = None
+    email: str
+    full_name: str = ""
+    role: str
+    company_name: str | None = None
+    workspace_id: int | None = None
+    workspace_name: str | None = None
+    workspace: dict | None = None
+    client_profile: Any = None
+    agency_profile: Any = None
+    created_at: datetime | None = None
+
+    def model_post_init(self, __context: Any) -> None:
+        if self.user_id is None:
+            self.user_id = self.id
+
+
+class PortfolioItem(BaseModel):
+    title: str = Field(default="", max_length=200)
+    video_url: str = Field(default="", max_length=500)
+    thumbnail_url: str = Field(default="", max_length=500)
+    description: str = Field(default="", max_length=2000)
+
+
+class AgencyProfileUpdateInput(InputModel):
+    tagline: str | None = Field(default=None, max_length=255)
+    description: str | None = Field(default=None, max_length=10000)
+    specializations: list[str] | None = None
+    services: list[str] | None = None
+    portfolio: list[PortfolioItem] | None = None
+    contact_email: str | None = Field(default=None, max_length=320)
+    contact_phone: str | None = Field(default=None, max_length=64)
+    website: str | None = Field(default=None, max_length=255)
+
+    @field_validator("contact_email", mode="before")
+    @classmethod
+    def validate_contact_email(cls, v: Any) -> str | None:
+        if v is None:
+            return None
+        if isinstance(v, str):
+            s = v.strip()
+            if not s:
+                return ""
+            try:
+                email_validator.validate_email(s, check_deliverability=False, test_environment=True)
+            except Exception as e:
+                raise ValueError(f"Invalid email format: {e}") from e
+            return s
+        raise ValueError("Invalid email format")
+
+
+AgencyProfileUpdate = AgencyProfileUpdateInput
+
+
+class AgencyProfileResponse(BaseModel):
+    id: int
+    workspace_id: int
+    workspace_name: str = ""
+    tagline: str = ""
+    description: str = ""
+    specializations: list[str] = Field(default_factory=list)
+    services: list[str] = Field(default_factory=list)
+    portfolio: list[PortfolioItem] = Field(default_factory=list)
+    contact_email: str = ""
+    contact_phone: str = ""
+    website: str = ""
+    is_published: bool = False
+    published_at: datetime | None = None
+    can_publish: bool = False
+    is_ready_to_publish: bool = False
+    missing_fields: list[str] = Field(default_factory=list)
+    missing_publish_fields: list[str] = Field(default_factory=list)
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+class PublishStatusResponse(BaseModel):
+    workspace_id: int
+    is_published: bool
+    published_at: datetime | None = None
+    can_publish: bool = True
+    is_ready_to_publish: bool = True
+    missing_fields: list[str] = Field(default_factory=list)
+    missing_publish_fields: list[str] = Field(default_factory=list)
+    message: str = ""
+
+
+class AgencyDiscoveryItem(BaseModel):
+    workspace_id: int
+    name: str
+    tagline: str = ""
+    description: str = ""
+    specializations: list[str] = Field(default_factory=list)
+    services: list[str] = Field(default_factory=list)
+    portfolio: list[PortfolioItem] = Field(default_factory=list)
+    contact_email: str = ""
+    website: str = ""
+    is_published: bool = True
+    published_at: datetime | None = None
+
+
+class AgencyDiscoveryDetail(BaseModel):
+    workspace_id: int
+    name: str
+    tagline: str = ""
+    description: str = ""
+    specializations: list[str] = Field(default_factory=list)
+    services: list[str] = Field(default_factory=list)
+    portfolio: list[PortfolioItem] = Field(default_factory=list)
+    contact_email: str = ""
+    contact_phone: str = ""
+    website: str = ""
+    is_published: bool = True
+    published_at: datetime | None = None
+    created_at: datetime | None = None
+
+
+class ClientProfileUpdateInput(InputModel):
+    company_name: str = Field(default="", max_length=160)
+    industry: str = Field(default="", max_length=120)
+    brand_guidelines: str = Field(default="", max_length=10000)
+    website: str = Field(default="", max_length=255)
+
+
+class ClientProfileResponse(BaseModel):
+    id: int
+    user_id: int
+    company_name: str = ""
+    industry: str = ""
+    brand_guidelines: str = ""
+    website: str = ""
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+class ProjectRequestCreateInput(InputModel):
+    agency_workspace_id: int
+    title: str = Field(min_length=1, max_length=200)
+    description: str = Field(default="", max_length=10000)
+    video_type: str = Field(default="", max_length=80)
+    target_platform: str = Field(default="", max_length=80)
+    target_duration: str = Field(default="", max_length=80)
+    aspect_ratio: str = Field(default="", max_length=32)
+    editing_requirements: str = Field(default="", max_length=10000)
+    creative_direction: str = Field(default="", max_length=10000)
+    reference_links: list[str] = Field(default_factory=list)
+    deliverables_format: str = Field(default="", max_length=120)
+    budget: str = Field(default="", max_length=80)
+    deadline: datetime | None = None
+    status: str = Field(default="submitted", pattern="^(draft|submitted)$")
+
+
+class ProjectRequestUpdateInput(InputModel):
+    title: str | None = Field(default=None, max_length=200)
+    description: str | None = None
+    video_type: str | None = None
+    target_platform: str | None = None
+    target_duration: str | None = None
+    aspect_ratio: str | None = None
+    editing_requirements: str | None = None
+    creative_direction: str | None = None
+    reference_links: list[str] | None = None
+    deliverables_format: str | None = None
+    budget: str | None = None
+    deadline: datetime | None = None
+    status: str | None = Field(default=None, pattern="^(draft|submitted|under_review|proposal_received|accepted|declined|cancelled)$")
+
+
+class ProjectRequestResponse(BaseModel):
+    id: int
+    client_user_id: int
+    agency_workspace_id: int
+    agency_name: str = ""
+    client_name: str = ""
+    title: str
+    description: str = ""
+    video_type: str = ""
+    target_platform: str = ""
+    target_duration: str = ""
+    aspect_ratio: str = ""
+    editing_requirements: str = ""
+    creative_direction: str = ""
+    reference_links: list[str] = Field(default_factory=list)
+    deliverables_format: str = ""
+    budget: str = ""
+    deadline: datetime | None = None
+    status: str
+    project_id: int | None = None
+    proposals_count: int = 0
+    created_at: datetime
+    updated_at: datetime
+
+
+class ProposalCreateInput(InputModel):
+    scope_description: str = Field(min_length=1, max_length=10000)
+    estimated_days: int = Field(ge=1, le=365)
+    estimated_delivery_date: datetime | None = None
+    deliverables_summary: str = Field(default="", max_length=5000)
+
+
+class ProposalUpdateInput(InputModel):
+    scope_description: str | None = None
+    estimated_days: int | None = Field(default=None, ge=1, le=365)
+    estimated_delivery_date: datetime | None = None
+    deliverables_summary: str | None = None
+    status: str | None = Field(default=None, pattern="^(pending|accepted|declined)$")
+
+
+class ProposalResponse(BaseModel):
+    id: int
+    request_id: int
+    agency_workspace_id: int
+    scope_description: str
+    estimated_days: int
+    estimated_delivery_date: datetime | None = None
+    deliverables_summary: str = ""
+    status: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class ProposalActionResponse(BaseModel):
+    proposal_id: int
+    request_id: int
+    status: str
+    project_id: int | None = None
+
+
+class ProjectMessageCreateInput(InputModel):
+    request_id: int | None = None
+    project_id: int | None = None
+    content: str = Field(min_length=1, max_length=10000)
+
+
+class ProjectMessageResponse(BaseModel):
+    id: int
+    request_id: int | None = None
+    project_id: int | None = None
+    sender_id: int
+    sender_name: str = ""
+    sender_role: str
+    content: str
+    created_at: datetime
