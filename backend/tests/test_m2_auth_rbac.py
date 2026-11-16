@@ -79,7 +79,14 @@ if not any(getattr(r, "prefix", None) == "/api/test-rbac" for r in app.routes):
 
 def test_baseline_144_records_invariants():
     """Test 1: Verify exactly 144 operational records and PRAGMA integrity in active database."""
-    prod_path = "backend/frameops.db" if os.path.exists("backend/frameops.db") else "frameops.db"
+    if os.path.exists("frameops_rehearse.db"):
+        prod_path = "frameops_rehearse.db"
+    elif os.path.exists("backend/frameops_rehearse.db"):
+        prod_path = "backend/frameops_rehearse.db"
+    elif os.path.exists("backend/frameops.db"):
+        prod_path = "backend/frameops.db"
+    else:
+        prod_path = "frameops.db"
     assert os.path.isfile(prod_path), f"Database not found at {prod_path}"
 
     con = sqlite3.connect(f"file:{prod_path}?mode=ro", uri=True)

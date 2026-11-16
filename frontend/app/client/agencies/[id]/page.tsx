@@ -1,7 +1,22 @@
 "use client";
+
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
+import {
+  ArrowLeft,
+  ArrowRight,
+  ExternalLink,
+  Film,
+  Globe,
+  Mail,
+  Phone,
+  Plus,
+  Sparkles,
+  Video,
+} from "lucide-react";
+import { AppLayout } from "@/components/shared/app-layout";
+import { PageHeader } from "@/components/shared/page-header";
 
 interface Agency {
   workspace_id: number;
@@ -27,131 +42,228 @@ export default function AgencyDetailPage() {
 
   useEffect(() => {
     fetch(`/api/discovery/agencies/${workspaceId}`)
-      .then(r => {
-        if (r.status === 404) { setNotFound(true); return null; }
+      .then((r) => {
+        if (r.status === 404) {
+          setNotFound(true);
+          return null;
+        }
         return r.json();
       })
-      .then(data => { if (data) setAgency(data); })
+      .then((data) => {
+        if (data) setAgency(data);
+      })
       .finally(() => setLoading(false));
   }, [workspaceId]);
 
-  if (loading) return (
-    <div className="min-h-screen bg-gray-950 flex items-center justify-center text-gray-400">Loading…</div>
-  );
+  if (loading) {
+    return (
+      <AppLayout persona="client">
+        <div className="loading-line">Opening Agency Profile…</div>
+      </AppLayout>
+    );
+  }
 
-  if (notFound || !agency) return (
-    <div className="min-h-screen bg-gray-950 flex flex-col items-center justify-center text-gray-400">
-      <div className="text-5xl mb-4">404</div>
-      <div className="text-lg font-medium mb-2">Agency not found</div>
-      <Link href="/client/agencies" className="text-blue-400 hover:text-blue-300 text-sm">
-        ← Back to agencies
+  if (notFound || !agency) {
+    return (
+      <AppLayout persona="client">
+        <div className="panel" style={{ padding: "40px 20px", textAlign: "center" }}>
+          <h2 style={{ font: "600 20px var(--display)", color: "#fff", marginBottom: "8px" }}>
+            Agency Not Found
+          </h2>
+          <p style={{ color: "#9295a8", marginBottom: "16px" }}>
+            The agency profile you requested does not exist or is currently unpublished.
+          </p>
+          <Link href="/client/agencies" className="primary-button" style={{ textDecoration: "none" }}>
+            <ArrowLeft size={14} /> Back to Agency Catalog
+          </Link>
+        </div>
+      </AppLayout>
+    );
+  }
+
+  const headerActions = (
+    <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+      <Link href="/client/agencies" className="quiet-button">
+        <ArrowLeft size={14} /> Back to Catalog
+      </Link>
+      <Link
+        href={`/client/requests/new?agency=${agency.workspace_id}&name=${encodeURIComponent(agency.name)}`}
+        className="primary-button"
+      >
+        <Plus size={15} /> Submit Project Brief
       </Link>
     </div>
   );
 
   return (
-    <div className="min-h-screen bg-gray-950 text-white">
-      <nav className="border-b border-gray-800 px-6 py-4 flex items-center justify-between">
-        <Link href="/" className="text-xl font-bold">
-          <span className="text-white">FRAME</span><span className="text-blue-400">OPS</span>
-        </Link>
-        <Link href="/client/agencies" className="text-sm text-gray-400 hover:text-white">
-          ← All Agencies
-        </Link>
-      </nav>
+    <AppLayout persona="client">
+      <PageHeader
+        eyebrow="CLIENT / AGENCY DETAILS"
+        title={agency.name}
+        description={agency.tagline || "Verified Video Production Studio"}
+        actions={headerActions}
+      />
 
-      <div className="max-w-4xl mx-auto px-6 py-10">
-        {/* Hero */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold mb-1">{agency.name}</h1>
-          {agency.tagline && <p className="text-blue-400 text-lg">{agency.tagline}</p>}
+      <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+        {/* Agency Hero Card */}
+        <section className="panel" style={{ padding: "26px" }}>
+          <div style={{ display: "flex", alignItems: "flex-start", gap: "16px", marginBottom: "16px" }}>
+            <div className="client-monogram large" style={{ width: "48px", height: "48px", fontSize: "18px" }}>
+              {agency.name.slice(0, 1).toUpperCase()}
+            </div>
+            <div>
+              <h2 style={{ margin: "0 0 4px", font: "600 18px var(--display)", color: "#fff" }}>
+                {agency.name}
+              </h2>
+              {agency.tagline && (
+                <p style={{ margin: 0, color: "var(--violet)", fontSize: "12px", fontWeight: 500 }}>
+                  {agency.tagline}
+                </p>
+              )}
+            </div>
+          </div>
 
           {agency.description && (
-            <p className="text-gray-300 mt-4 leading-relaxed">{agency.description}</p>
+            <p style={{ margin: "0 0 20px", color: "#cbd5e1", fontSize: "13px", lineHeight: 1.6, whiteSpace: "pre-wrap" }}>
+              {agency.description}
+            </p>
           )}
 
-          <Link
-            href={`/client/requests/new?agency=${agency.workspace_id}&name=${encodeURIComponent(agency.name)}`}
-            className="inline-flex items-center gap-2 mt-6 px-6 py-3 bg-blue-600 hover:bg-blue-500 rounded-xl font-medium transition-colors"
+          <div
+            style={{
+              paddingTop: "16px",
+              borderTop: "1px solid var(--line)",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              flexWrap: "wrap",
+              gap: "12px",
+            }}
           >
-            📋 Submit Project Brief to {agency.name}
-          </Link>
+            <div style={{ display: "flex", gap: "16px", fontSize: "11px", color: "#8e92a6", flexWrap: "wrap" }}>
+              {agency.contact_email && (
+                <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                  <Mail size={14} color="var(--violet)" /> {agency.contact_email}
+                </span>
+              )}
+              {agency.contact_phone && (
+                <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                  <Phone size={14} color="var(--violet)" /> {agency.contact_phone}
+                </span>
+              )}
+              {agency.website && (
+                <a
+                  href={agency.website}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{ display: "inline-flex", alignItems: "center", gap: "6px", color: "var(--violet)", textDecoration: "none" }}
+                >
+                  <Globe size={14} /> {agency.website.replace(/^https?:\/\//, "")} <ExternalLink size={12} />
+                </a>
+              )}
+            </div>
+
+            <Link
+              href={`/client/requests/new?agency=${agency.workspace_id}&name=${encodeURIComponent(agency.name)}`}
+              className="primary-button"
+            >
+              Submit Brief to {agency.name} <ArrowRight size={14} />
+            </Link>
+          </div>
+        </section>
+
+        {/* Specializations & Services */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "16px" }}>
+          {agency.specializations?.length > 0 && (
+            <div className="panel" style={{ padding: "20px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px" }}>
+                <Sparkles size={15} color="var(--violet)" />
+                <h3 style={{ margin: 0, font: "600 14px var(--display)", color: "#fff" }}>Creative Specializations</h3>
+              </div>
+              <div className="chip-container">
+                {agency.specializations.map((s) => (
+                  <span key={s} className="chip-badge">
+                    {s}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {agency.services?.length > 0 && (
+            <div className="panel" style={{ padding: "20px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px" }}>
+                <Video size={15} color="var(--violet)" />
+                <h3 style={{ margin: 0, font: "600 14px var(--display)", color: "#fff" }}>Production Services</h3>
+              </div>
+              <div className="chip-container">
+                {agency.services.map((s) => (
+                  <span
+                    key={s}
+                    className="chip-badge"
+                    style={{
+                      background: "rgba(255,255,255,.04)",
+                      borderColor: "rgba(255,255,255,.1)",
+                      color: "#cbd5e1",
+                    }}
+                  >
+                    {s}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* Specializations */}
-        {agency.specializations.length > 0 && (
-          <div className="mb-6">
-            <h2 className="text-sm font-medium text-gray-400 uppercase tracking-wider mb-3">Specializations</h2>
-            <div className="flex flex-wrap gap-2">
-              {agency.specializations.map(s => (
-                <span key={s} className="text-sm bg-blue-900/30 text-blue-300 border border-blue-800/50 rounded-full px-3 py-1">
-                  {s}
-                </span>
-              ))}
+        {/* Portfolio Section */}
+        {agency.portfolio?.length > 0 && (
+          <section className="panel" style={{ padding: "22px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "16px" }}>
+              <span className="head-icon">
+                <Film size={15} />
+              </span>
+              <h3 style={{ margin: 0, font: "600 15px var(--display)", color: "#fff" }}>
+                Portfolio Showcases
+              </h3>
             </div>
-          </div>
-        )}
 
-        {/* Services */}
-        {agency.services.length > 0 && (
-          <div className="mb-6">
-            <h2 className="text-sm font-medium text-gray-400 uppercase tracking-wider mb-3">Services</h2>
-            <div className="flex flex-wrap gap-2">
-              {agency.services.map(s => (
-                <span key={s} className="text-sm bg-gray-800 text-gray-300 rounded-full px-3 py-1">
-                  {s}
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Portfolio */}
-        {agency.portfolio.length > 0 && (
-          <div className="mb-6">
-            <h2 className="text-sm font-medium text-gray-400 uppercase tracking-wider mb-3">Portfolio</h2>
-            <div className="grid sm:grid-cols-2 gap-4">
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: "14px" }}>
               {agency.portfolio.map((item, i) => (
-                <div key={i} className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-                  <div className="font-medium mb-1">{item.title}</div>
-                  {item.description && <p className="text-gray-400 text-sm">{item.description}</p>}
+                <div
+                  key={i}
+                  className="panel"
+                  style={{
+                    padding: "16px",
+                    background: "rgba(255,255,255,.02)",
+                    display: "flex",
+                    flexDirection: "column",
+                  }}
+                >
+                  <b style={{ color: "#fff", fontSize: "13px", display: "block", marginBottom: "4px" }}>
+                    {item.title}
+                  </b>
+                  {item.description && (
+                    <p style={{ margin: "0 0 12px", color: "#8e92a6", fontSize: "11px", lineHeight: 1.5, flex: 1 }}>
+                      {item.description}
+                    </p>
+                  )}
                   {item.video_url && (
-                    <a href={item.video_url} target="_blank" rel="noopener noreferrer"
-                      className="text-blue-400 hover:text-blue-300 text-sm mt-2 inline-block">
-                      Watch →
+                    <a
+                      href={item.video_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="outline-action"
+                      style={{ marginTop: "auto", alignSelf: "flex-start", textDecoration: "none" }}
+                    >
+                      <Film size={12} /> Watch Reel <ExternalLink size={11} />
                     </a>
                   )}
                 </div>
               ))}
             </div>
-          </div>
+          </section>
         )}
-
-        {/* Contact */}
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
-          <h2 className="font-semibold mb-4">Contact</h2>
-          <div className="space-y-2 text-sm">
-            {agency.contact_email && (
-              <div className="text-gray-300">📧 {agency.contact_email}</div>
-            )}
-            {agency.contact_phone && (
-              <div className="text-gray-300">📞 {agency.contact_phone}</div>
-            )}
-            {agency.website && (
-              <a href={agency.website} target="_blank" rel="noopener noreferrer"
-                className="text-blue-400 hover:text-blue-300 block">
-                🌐 {agency.website}
-              </a>
-            )}
-          </div>
-          <Link
-            href={`/client/requests/new?agency=${agency.workspace_id}&name=${encodeURIComponent(agency.name)}`}
-            className="inline-flex items-center gap-2 mt-5 px-5 py-2.5 bg-blue-600 hover:bg-blue-500 rounded-lg text-sm font-medium transition-colors"
-          >
-            Submit a Project Brief →
-          </Link>
-        </div>
       </div>
-    </div>
+    </AppLayout>
   );
 }

@@ -1,7 +1,10 @@
 "use client";
+
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { ArrowRight } from "lucide-react";
+import { AuthLayout } from "@/components/shared/auth-layout";
 
 export default function ClientLoginPage() {
   const router = useRouter();
@@ -22,7 +25,7 @@ export default function ClientLoginPage() {
       });
       if (!r.ok) {
         const data = await r.json();
-        setError(data.detail || "Invalid email or password");
+        setError(typeof data.detail === "string" ? data.detail : "Invalid email or password");
         return;
       }
       const data = await r.json();
@@ -38,61 +41,69 @@ export default function ClientLoginPage() {
     }
   };
 
-  return (
-    <div className="min-h-screen bg-gray-950 flex flex-col items-center justify-center px-4">
-      <div className="w-full max-w-md">
-        <div className="text-center mb-8">
-          <Link href="/" className="text-2xl font-bold">
-            <span className="text-white">FRAME</span><span className="text-blue-400">OPS</span>
-          </Link>
-          <h1 className="text-white text-2xl font-semibold mt-4">Welcome back</h1>
-          <p className="text-gray-400 text-sm mt-1">Sign in to your client account</p>
-        </div>
-
-        <form onSubmit={handleSubmit} className="bg-gray-900 border border-gray-800 rounded-2xl p-8 space-y-4">
-          {error && (
-            <div className="bg-red-900/30 border border-red-700/50 rounded-lg p-3 text-red-300 text-sm">
-              {error}
-            </div>
-          )}
-
-          <div>
-            <label className="block text-gray-300 text-sm font-medium mb-1">Email</label>
-            <input
-              type="email" required value={form.email}
-              onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-blue-500"
-              placeholder="you@company.com"
-            />
-          </div>
-
-          <div>
-            <label className="block text-gray-300 text-sm font-medium mb-1">Password</label>
-            <input
-              type="password" required value={form.password}
-              onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-blue-500"
-              placeholder="Your password"
-            />
-          </div>
-
-          <button
-            type="submit" disabled={loading}
-            className="w-full py-3 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-white font-medium text-sm transition-colors"
-          >
-            {loading ? "Signing in…" : "Sign In"}
-          </button>
-        </form>
-
-        <p className="text-center text-gray-500 text-sm mt-4">
-          New client?{" "}
-          <Link href="/client/register" className="text-blue-400 hover:text-blue-300">Create an account</Link>
-        </p>
-        <p className="text-center text-gray-600 text-xs mt-2">
-          Are you an agency?{" "}
-          <Link href="/agency/login" className="text-purple-400 hover:text-purple-300">Agency login →</Link>
-        </p>
+  const footer = (
+    <div style={{ textAlign: "center", fontSize: "11px", color: "var(--muted)", display: "flex", flexDirection: "column", gap: "8px" }}>
+      <div>
+        New client?{" "}
+        <Link href="/client/register" style={{ color: "var(--violet)", fontWeight: 500 }}>
+          Create client account →
+        </Link>
+      </div>
+      <div>
+        Are you an agency?{" "}
+        <Link href="/agency/login" style={{ color: "var(--muted)", textDecoration: "underline" }}>
+          Agency login
+        </Link>
       </div>
     </div>
+  );
+
+  return (
+    <AuthLayout
+      eyebrow="CLIENT PORTAL ACCESS"
+      title="Client Sign In"
+      subtitle="Sign in to track your video projects, review cuts, and manage creative briefs."
+      footer={footer}
+    >
+      <form onSubmit={handleSubmit} className="stack-form">
+        {error && <div className="error-box">{error}</div>}
+
+        <label>
+          Email
+          <input
+            type="email"
+            name="email"
+            required
+            autoComplete="email"
+            value={form.email}
+            onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+            placeholder="you@company.com"
+          />
+        </label>
+
+        <label>
+          Password
+          <input
+            type="password"
+            name="password"
+            required
+            autoComplete="current-password"
+            value={form.password}
+            onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
+            placeholder="Your client password"
+          />
+        </label>
+
+        <button
+          type="submit"
+          disabled={loading}
+          className="primary-button full"
+          style={{ height: "42px" }}
+        >
+          {loading ? "Signing in…" : "Sign In to Client Portal"}
+          <ArrowRight size={16} />
+        </button>
+      </form>
+    </AuthLayout>
   );
 }

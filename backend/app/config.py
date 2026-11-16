@@ -2,7 +2,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=("../.env", ".env"), extra="ignore")
+    model_config = SettingsConfigDict(env_file=("backend/.env", "../.env", ".env"), extra="ignore")
 
     database_url: str = "sqlite:///./frameops.db"
     frontend_origin: str = "http://localhost:3000"
@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     upload_dir: str = "../storage/uploads"
     max_upload_bytes: int = 25 * 1024 * 1024
     cors_origins: str = "http://localhost:3000"
+    trusted_proxies: str = "127.0.0.1,::1"
+    redis_url: str = ""
+    app_env: str = "development"
 
 
 settings = Settings()

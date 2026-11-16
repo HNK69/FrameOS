@@ -1,7 +1,27 @@
 "use client";
+
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
+import {
+  ArrowLeft,
+  ArrowRight,
+  Calendar,
+  CheckCircle2,
+  Clock,
+  DollarSign,
+  Film,
+  FileText,
+  Layers,
+  MessageSquare,
+  Send,
+  Sparkles,
+  Tv,
+  X,
+} from "lucide-react";
+import { AppLayout } from "@/components/shared/app-layout";
+import { PageHeader } from "@/components/shared/page-header";
+import { StatusPill } from "@/components/shared/status-pill";
 
 interface ProjectRequest {
   id: number;
@@ -102,7 +122,10 @@ export default function AgencyRequestDetailPage() {
         await loadData();
       } else {
         const err = await res.json();
-        setProposalMsg({ type: "error", text: typeof err.detail === "string" ? err.detail : "Failed to submit proposal" });
+        setProposalMsg({
+          type: "error",
+          text: typeof err.detail === "string" ? err.detail : "Failed to submit proposal",
+        });
       }
     } catch {
       setProposalMsg({ type: "error", text: "Network error submitting proposal." });
@@ -136,246 +159,252 @@ export default function AgencyRequestDetailPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-950 flex items-center justify-center text-gray-400">
-        Loading request…
-      </div>
+      <AppLayout persona="agency">
+        <div className="loading-line">Opening Project Request…</div>
+      </AppLayout>
     );
   }
 
   if (!req) {
     return (
-      <div className="min-h-screen bg-gray-950 flex flex-col items-center justify-center text-gray-400">
-        <p>Project request not found.</p>
-        <Link href="/agency/requests" className="text-purple-400 mt-2">
-          ← Back to Inbox
-        </Link>
-      </div>
+      <AppLayout persona="agency">
+        <div className="panel" style={{ padding: "40px 20px", textAlign: "center" }}>
+          <p style={{ color: "#9295a8" }}>Project request not found.</p>
+          <Link href="/agency/requests" className="primary-button" style={{ marginTop: "12px" }}>
+            <ArrowLeft size={14} /> Back to Requests
+          </Link>
+        </div>
+      </AppLayout>
     );
   }
 
+  const headerActions = (
+    <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+      <Link href="/agency/requests" className="quiet-button">
+        <ArrowLeft size={14} /> Requests Inbox
+      </Link>
+      {req.project_id && (
+        <Link href={`/production?project=${req.project_id}`} className="primary-button">
+          Open Production <ArrowRight size={14} />
+        </Link>
+      )}
+    </div>
+  );
+
   return (
-    <div className="min-h-screen bg-gray-950 text-white">
-      {/* Top Navbar */}
-      <nav className="border-b border-gray-800 px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Link href="/" className="text-xl font-bold">
-            <span className="text-white">FRAME</span>
-            <span className="text-purple-400">OPS</span>
-          </Link>
-          <span className="text-xs bg-purple-900/50 text-purple-300 border border-purple-700/50 px-2 py-0.5 rounded">
-            Agency Studio
-          </span>
-        </div>
-        <div className="flex items-center gap-3">
-          <Link href="/agency/requests" className="text-sm text-gray-400 hover:text-white">
-            ← Requests Inbox
-          </Link>
-          <Link href="/clients" className="text-sm text-gray-400 hover:text-white">
-            Clients & Projects
-          </Link>
-        </div>
-      </nav>
+    <AppLayout persona="agency">
+      <PageHeader
+        eyebrow={`WORKSPACE / REQUESTS / #${req.id}`}
+        title={req.title}
+        description={`Submitted by ${req.client_name || `User #${req.client_user_id}`} on ${new Date(req.created_at).toLocaleDateString()}`}
+        actions={headerActions}
+      />
 
-      <div className="max-w-4xl mx-auto px-6 py-8 space-y-6">
-        {/* Brief Header */}
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
-            <div>
-              <div className="flex items-center gap-3">
-                <h1 className="text-2xl font-bold">{req.title}</h1>
-                <span className="text-xs px-2.5 py-0.5 rounded-full border border-purple-700/50 bg-purple-900/40 text-purple-300 font-medium">
-                  {req.status.replace("_", " ")}
-                </span>
-              </div>
-              <p className="text-sm text-gray-400 mt-1">
-                Client: <span className="text-gray-200 font-medium">{req.client_name || `User #${req.client_user_id}`}</span> · Submitted on {new Date(req.created_at).toLocaleDateString()}
-              </p>
+      <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+        {/* Brief Overview Panel */}
+        <div className="panel" style={{ padding: "22px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px", flexWrap: "wrap", gap: "10px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              <span className="head-icon">
+                <FileText size={15} />
+              </span>
+              <h2 style={{ margin: 0, font: "600 16px var(--display)", color: "#fff" }}>
+                Client Brief Specifications
+              </h2>
             </div>
-
-            {req.project_id && (
-              <div className="bg-green-950/40 border border-green-800 text-green-300 px-3 py-2 rounded-lg text-sm">
-                Active Project #{req.project_id}
-                <Link href={`/production?project=${req.project_id}`} className="ml-2 underline text-green-200">
-                  Open Production →
-                </Link>
-              </div>
-            )}
+            <StatusPill status={req.status} />
           </div>
 
-          <div className="border-t border-gray-800 pt-4 grid sm:grid-cols-2 gap-4 text-sm">
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+              gap: "14px",
+              padding: "16px",
+              borderRadius: "14px",
+              background: "rgba(0,0,0,.3)",
+              border: "1px solid var(--line)",
+              marginBottom: "16px",
+            }}
+          >
             <div>
-              <span className="text-gray-500">Video Type:</span>{" "}
-              <span className="text-gray-200">{req.video_type || "Standard"}</span>
+              <small style={{ color: "#7e8297", fontSize: "10px", fontFamily: "var(--mono)", textTransform: "uppercase" }}>Video Type</small>
+              <div style={{ color: "#f0f0f8", fontSize: "12px", fontWeight: 500, marginTop: "2px" }}>{req.video_type || "Standard"}</div>
             </div>
             <div>
-              <span className="text-gray-500">Target Platform:</span>{" "}
-              <span className="text-gray-200">{req.target_platform || "All Platforms"}</span>
+              <small style={{ color: "#7e8297", fontSize: "10px", fontFamily: "var(--mono)", textTransform: "uppercase" }}>Target Platform</small>
+              <div style={{ color: "#f0f0f8", fontSize: "12px", fontWeight: 500, marginTop: "2px" }}>{req.target_platform || "All Platforms"}</div>
             </div>
             <div>
-              <span className="text-gray-500">Duration:</span>{" "}
-              <span className="text-gray-200">{req.target_duration || "Flexible"}</span>
+              <small style={{ color: "#7e8297", fontSize: "10px", fontFamily: "var(--mono)", textTransform: "uppercase" }}>Target Duration</small>
+              <div style={{ color: "#f0f0f8", fontSize: "12px", fontWeight: 500, marginTop: "2px" }}>{req.target_duration || "Flexible"}</div>
             </div>
             <div>
-              <span className="text-gray-500">Aspect Ratio:</span>{" "}
-              <span className="text-gray-200">{req.aspect_ratio || "16:9"}</span>
+              <small style={{ color: "#7e8297", fontSize: "10px", fontFamily: "var(--mono)", textTransform: "uppercase" }}>Aspect Ratio</small>
+              <div style={{ color: "#f0f0f8", fontSize: "12px", fontWeight: 500, marginTop: "2px" }}>{req.aspect_ratio || "16:9"}</div>
             </div>
             <div>
-              <span className="text-gray-500">Budget:</span>{" "}
-              <span className="text-gray-200">{req.budget || "Open"}</span>
+              <small style={{ color: "#7e8297", fontSize: "10px", fontFamily: "var(--mono)", textTransform: "uppercase" }}>Budget</small>
+              <div style={{ color: "#5be3aa", fontSize: "12px", fontWeight: 600, marginTop: "2px" }}>{req.budget || "Open"}</div>
             </div>
             <div>
-              <span className="text-gray-500">Deadline:</span>{" "}
-              <span className="text-gray-200">
+              <small style={{ color: "#7e8297", fontSize: "10px", fontFamily: "var(--mono)", textTransform: "uppercase" }}>Deadline</small>
+              <div style={{ color: "#f0f0f8", fontSize: "12px", fontWeight: 500, marginTop: "2px" }}>
                 {req.deadline ? new Date(req.deadline).toLocaleDateString() : "Flexible"}
-              </span>
+              </div>
             </div>
           </div>
 
           {req.description && (
-            <div className="mt-4 pt-4 border-t border-gray-800 text-sm">
-              <span className="text-gray-500 font-medium block mb-1">Project Description:</span>
-              <p className="text-gray-200 whitespace-pre-wrap">{req.description}</p>
+            <div style={{ marginBottom: "14px" }}>
+              <b style={{ color: "#e2e3ec", fontSize: "12px", display: "block", marginBottom: "4px" }}>Project Scope & Goals:</b>
+              <p style={{ margin: 0, color: "#cbd5e1", fontSize: "12px", lineHeight: 1.6, whiteSpace: "pre-wrap" }}>
+                {req.description}
+              </p>
             </div>
           )}
 
           {req.editing_requirements && (
-            <div className="mt-4 pt-4 border-t border-gray-800 text-sm">
-              <span className="text-gray-500 font-medium block mb-1">Editing Requirements:</span>
-              <p className="text-gray-200 whitespace-pre-wrap">{req.editing_requirements}</p>
+            <div style={{ marginBottom: "14px" }}>
+              <b style={{ color: "#e2e3ec", fontSize: "12px", display: "block", marginBottom: "4px" }}>Editing Requirements:</b>
+              <p style={{ margin: 0, color: "#cbd5e1", fontSize: "12px", lineHeight: 1.6, whiteSpace: "pre-wrap" }}>
+                {req.editing_requirements}
+              </p>
             </div>
           )}
 
           {req.creative_direction && (
-            <div className="mt-4 pt-4 border-t border-gray-800 text-sm">
-              <span className="text-gray-500 font-medium block mb-1">Creative Direction:</span>
-              <p className="text-gray-200 whitespace-pre-wrap">{req.creative_direction}</p>
+            <div>
+              <b style={{ color: "#e2e3ec", fontSize: "12px", display: "block", marginBottom: "4px" }}>Creative Direction & References:</b>
+              <p style={{ margin: 0, color: "#cbd5e1", fontSize: "12px", lineHeight: 1.6, whiteSpace: "pre-wrap" }}>
+                {req.creative_direction}
+              </p>
             </div>
           )}
         </div>
 
         {/* Submit Proposal Section */}
         {req.status !== "accepted" && req.status !== "declined" && (
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
-            <h2 className="text-lg font-semibold mb-2">Submit Agency Proposal</h2>
-            <p className="text-gray-400 text-sm mb-4">
-              Send your deliverables scope, turnaround estimate, and commercial terms to the client.
-            </p>
+          <section className="form-panel">
+            <div className="form-section-title">
+              <Sparkles size={16} color="var(--violet)" />
+              <h3>Submit Agency Proposal</h3>
+              <small>Deliverables & Estimates</small>
+            </div>
 
             {proposalMsg && (
               <div
-                className={`mb-4 p-3 rounded-lg text-sm border ${
-                  proposalMsg.type === "success"
-                    ? "bg-green-950/40 border-green-800 text-green-300"
-                    : "bg-red-950/40 border-red-800 text-red-300"
-                }`}
+                className="notice"
+                style={
+                  proposalMsg.type === "error"
+                    ? { borderColor: "rgba(255,119,125,.4)", background: "rgba(134,44,51,.3)" }
+                    : undefined
+                }
               >
-                {proposalMsg.text}
+                <span>{proposalMsg.text}</span>
+                <button onClick={() => setProposalMsg(null)} aria-label="Dismiss">
+                  <X size={14} />
+                </button>
               </div>
             )}
 
-            <form onSubmit={submitProposal} className="space-y-4">
-              <div>
-                <label className="block text-gray-300 text-sm font-medium mb-1">
-                  Scope Description <span className="text-purple-400">*</span>
-                </label>
+            <form onSubmit={submitProposal} className="stack-form">
+              <label>
+                Scope & Deliverables Description <span style={{ color: "var(--violet)" }}>*</span>
                 <textarea
+                  name="scope_description"
                   required
                   rows={3}
                   value={scopeDescription}
                   onChange={(e) => setScopeDescription(e.target.value)}
                   placeholder="Outline what your agency will deliver, revision rounds, creative style, and milestones…"
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-purple-500"
                 />
-              </div>
+              </label>
 
-              <div className="grid sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-gray-300 text-sm font-medium mb-1">
-                    Estimated Production Days <span className="text-purple-400">*</span>
-                  </label>
+              <div className="form-grid">
+                <label>
+                  Estimated Production Turnaround (Days) <span style={{ color: "var(--violet)" }}>*</span>
                   <input
+                    name="estimated_days"
                     type="number"
                     required
                     min={1}
                     max={365}
                     value={estimatedDays}
                     onChange={(e) => setEstimatedDays(Number(e.target.value))}
-                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-purple-500"
                   />
-                </div>
+                </label>
 
-                <div>
-                  <label className="block text-gray-300 text-sm font-medium mb-1">
-                    Deliverables Summary
-                  </label>
+                <label>
+                  Deliverables Summary
                   <input
+                    name="deliverables_summary"
                     type="text"
                     value={deliverablesSummary}
                     onChange={(e) => setDeliverablesSummary(e.target.value)}
-                    placeholder="e.g. 1x 4K Master, 2x Social Cuts (9:16), captions"
-                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-purple-500"
+                    placeholder="e.g. 1x 4K Master, 2x Social Cuts (9:16), Captions"
                   />
-                </div>
+                </label>
               </div>
 
-              <button
-                type="submit"
-                disabled={proposalSubmitting}
-                className="px-6 py-2.5 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white rounded-lg text-sm font-medium transition-colors"
-              >
-                {proposalSubmitting ? "Submitting…" : "Send Proposal to Client"}
-              </button>
+              <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "6px" }}>
+                <button type="submit" disabled={proposalSubmitting} className="primary-button">
+                  {proposalSubmitting ? "Submitting Proposal…" : "Send Proposal to Client"}
+                  <ArrowRight size={14} />
+                </button>
+              </div>
             </form>
-          </div>
+          </section>
         )}
 
         {/* Messaging Thread */}
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
-          <h2 className="text-lg font-semibold mb-4">Direct Communication</h2>
+        <section className="form-panel">
+          <div className="form-section-title">
+            <MessageSquare size={16} color="var(--violet)" />
+            <h3>Direct Client Discussion</h3>
+            <small>Integrated Communication</small>
+          </div>
 
-          <div className="space-y-3 mb-6 max-h-80 overflow-y-auto pr-2">
+          <div className="message-thread-box">
             {messages.length === 0 ? (
-              <p className="text-sm text-gray-500">No messages yet. Send a note to the client.</p>
+              <p style={{ margin: 0, padding: "20px", color: "#74788d", fontSize: "11px", textAlign: "center" }}>
+                No messages yet. Send a note to align with the client on creative requirements.
+              </p>
             ) : (
               messages.map((m) => (
                 <div
                   key={m.id}
-                  className={`p-3 rounded-lg text-sm ${
-                    m.sender_role === "agency"
-                      ? "bg-purple-950/40 border border-purple-800/50 text-purple-200 ml-8"
-                      : "bg-gray-800 text-gray-200 mr-8"
-                  }`}
+                  className={`message-bubble ${m.sender_role === "agency" ? "agency" : "client"}`}
                 >
-                  <div className="flex items-center justify-between text-xs text-gray-400 mb-1">
-                    <span className="font-semibold text-white">
-                      {m.sender_name || (m.sender_role === "agency" ? "You (Agency)" : "Client")}
-                    </span>
+                  <div className="message-author-row">
+                    <b>{m.sender_name || (m.sender_role === "agency" ? "You (Agency)" : "Client")}</b>
                     <span>{new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
                   </div>
-                  <p>{m.content}</p>
+                  <p style={{ margin: 0 }}>{m.content}</p>
                 </div>
               ))
             )}
           </div>
 
-          <form onSubmit={sendMessage} className="flex gap-2">
+          <form onSubmit={sendMessage} className="chat-input-bar">
             <input
               type="text"
               value={msgInput}
               onChange={(e) => setMsgInput(e.target.value)}
-              placeholder="Ask a question about the creative direction or budget…"
-              className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-purple-500"
+              placeholder="Ask a question about creative direction, raw footage format, or budget…"
             />
             <button
               type="submit"
               disabled={sendingMsg || !msgInput.trim()}
-              className="px-4 py-2 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white rounded-lg text-sm font-medium transition-colors"
+              className="primary-button"
+              style={{ height: "40px" }}
             >
-              Send Message
+              <Send size={14} />
+              <span>Send</span>
             </button>
           </form>
-        </div>
+        </section>
       </div>
-    </div>
+    </AppLayout>
   );
 }

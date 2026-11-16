@@ -9,7 +9,8 @@ from uuid import uuid4
 
 from fastapi import APIRouter, Cookie, Depends, File, Header, HTTPException, Response, UploadFile
 from fastapi.responses import FileResponse
-from sqlalchemy import func, select
+from fastapi.security import HTTPAuthorizationCredentials
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from ..config import settings
@@ -19,9 +20,12 @@ from ..models import (
     Client,
     ClientFeedbackSubmission,
     ClientPortalAccess,
+    Membership,
     MemoryOperation,
     Project,
+    ProjectRequest,
     ReviewVersion,
+    User,
     VideoComment,
     now_utc,
 )
@@ -33,10 +37,15 @@ from ..schemas import (
     PortalLoginInput,
 )
 from ..security import (
+    bearer,
     current_client_identity,
     current_identity,
     hash_password,
     issue_client_token,
+    rate_limit_auth,
+    resolve_portal_identity,
+    token_revocation_store,
+    validate_upload_security,
     verify_password,
 )
 from ..services import groq, hindsight
@@ -117,16 +126,33 @@ def _ensure_review_version(db: Session, project: Project) -> ReviewVersion:
     return version
 
 
-def _get_portal_project(db: Session, project_id: int, client_id: int, workspace_id: int) -> Project:
-    project = db.scalar(
-        select(Project).where(
-            Project.id == project_id,
-            Project.client_id == client_id,
-            Project.workspace_id == workspace_id,
-        )
-    )
+def _get_portal_project(db: Session, project_id: int, client_or_id: Client | int, workspace_id: int) -> Project:
+    project = db.get(Project, project_id)
     if not project:
         raise HTTPException(404, "Project not found or not assigned to your client account")
+
+    client = client_or_id if isinstance(client_or_id, Client) else db.get(Client, client_or_id)
+    auth_user = getattr(client, "_auth_user", None) if client else None
+
+    if auth_user:
+        # Verified platform client user: authorization strictly bound to originating project request OR client ownership
+        is_owner = False
+        if project.request_id:
+            req = db.get(ProjectRequest, project.request_id)
+            if req and req.client_user_id == auth_user.id:
+                is_owner = True
+        if not is_owner and client and project.client_id == client.id:
+            is_owner = True
+
+        if not is_owner:
+            raise HTTPException(404, "Project not found or not assigned to your client account")
+        return project
+
+    # Guest reviewer / direct client portal access: must match client_id and workspace_id
+    client_id = client.id if client else (client_or_id if isinstance(client_or_id, int) else 0)
+    if project.client_id != client_id or project.workspace_id != workspace_id:
+        raise HTTPException(404, "Project not found or not assigned to your client account")
+
     return project
 
 
@@ -236,15 +262,24 @@ def get_client_portal_access(client_id: int, db: Session = Depends(get_db), iden
 # --- Client Authentication ---
 
 @router.post("/api/portal/auth/login")
-def portal_login(data: PortalLoginInput, response: Response, db: Session = Depends(get_db)):
+def portal_login(
+    data: PortalLoginInput,
+    response: Response,
+    db: Session = Depends(get_db),
+    _rl: None = Depends(rate_limit_auth),
+):
     if not data.token and not data.code:
         raise HTTPException(401, "Passcode or access token is required")
 
     access = None
-    if data.token:
-        access = db.scalar(select(ClientPortalAccess).where(ClientPortalAccess.access_token == data.token.strip()))
-    elif data.code:
-        input_code = data.code.strip()
+    token_str = (data.token or "").strip()
+    code_str = (data.code or "").strip()
+
+    if token_str:
+        access = db.scalar(select(ClientPortalAccess).where(ClientPortalAccess.access_token == token_str))
+
+    if not access and (code_str or token_str):
+        input_code = code_str or token_str
         candidates = db.scalars(select(ClientPortalAccess)).all()
         for cand in candidates:
             if cand.passcode.startswith("$"):
@@ -294,9 +329,67 @@ def portal_login(data: PortalLoginInput, response: Response, db: Session = Depen
 
 
 @router.get("/api/portal/auth/me")
-def portal_me(client_identity=Depends(current_client_identity), db: Session = Depends(get_db)):
-    client, wid = client_identity
+def portal_me(portal_identity=Depends(resolve_portal_identity), db: Session = Depends(get_db)):
+    client, wid, user = portal_identity
+
+    if client is None and user is not None:
+        # Authenticated marketplace client with no agency engagement yet
+        company = user.client_profile.company_name if user.client_profile else ""
+        return {
+            "client": None,
+            "has_engagement": False,
+            "authenticated": True,
+            "role": "client",
+            "user": {
+                "id": user.id,
+                "email": user.email,
+                "full_name": user.full_name,
+                "company_name": company,
+            },
+            "access_code": "",
+            "projects_count": 0,
+            "workspace_id": None,
+        }
+
+    auth_user = getattr(client, "_auth_user", None) or user
     access = _ensure_portal_access(db, client)
+    access_code = access.passcode if access else ""
+
+    if auth_user:
+        projects_count = db.scalar(
+            select(func.count(Project.id))
+            .outerjoin(ProjectRequest, Project.request_id == ProjectRequest.id)
+            .where(
+                or_(
+                    ProjectRequest.client_user_id == auth_user.id,
+                    Project.client_id == client.id,
+                )
+            )
+        ) or 0
+        company = auth_user.client_profile.company_name if auth_user.client_profile else client.brand
+        industry = auth_user.client_profile.industry if auth_user.client_profile else client.industry
+        return {
+            "client": {
+                "id": client.id,
+                "name": client.name or auth_user.full_name or auth_user.email,
+                "brand": company,
+                "industry": industry,
+                "description": client.description or f"Client account ({auth_user.email})",
+            },
+            "has_engagement": True,
+            "authenticated": True,
+            "role": "client",
+            "user": {
+                "id": auth_user.id,
+                "email": auth_user.email,
+                "full_name": auth_user.full_name,
+                "company_name": company,
+            },
+            "access_code": access_code,
+            "projects_count": projects_count,
+            "workspace_id": wid,
+        }
+
     projects_count = db.query(Project).filter_by(client_id=client.id, workspace_id=wid).count()
     return {
         "client": {
@@ -306,16 +399,35 @@ def portal_me(client_identity=Depends(current_client_identity), db: Session = De
             "industry": client.industry,
             "description": client.description,
         },
-        "access_code": access.passcode,
+        "has_engagement": True,
+        "authenticated": True,
+        "role": "guest",
+        "user": None,
+        "access_code": access_code,
         "projects_count": projects_count,
         "workspace_id": wid,
     }
 
 
 @router.post("/api/portal/auth/logout")
-def portal_logout(response: Response):
+def portal_logout(
+    response: Response,
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
+    frameops_portal_session: str | None = Cookie(default=None),
+    frameops_client_session: str | None = Cookie(default=None),
+):
+    token = credentials.credentials if credentials else (frameops_portal_session or frameops_client_session)
+    if token:
+        token_revocation_store.revoke(token)
     response.delete_cookie(
         "frameops_portal_session",
+        path="/",
+        httponly=True,
+        secure=settings.auth_cookie_secure,
+        samesite="lax",
+    )
+    response.delete_cookie(
+        "frameops_client_session",
         path="/",
         httponly=True,
         secure=settings.auth_cookie_secure,
@@ -329,9 +441,30 @@ def portal_logout(response: Response):
 @router.get("/api/portal/projects")
 def portal_list_projects(
     db: Session = Depends(get_db),
-    client_identity=Depends(current_client_identity),
+    portal_identity=Depends(resolve_portal_identity),
 ):
-    client, wid = client_identity
+    client, wid, user = portal_identity
+    if not client or wid is None:
+        return []
+
+    auth_user = getattr(client, "_auth_user", None) or user
+    if auth_user:
+        # Multi-agency client user: strictly projects originating from verified requests submitted by this client user
+        stmt = (
+            select(Project)
+            .outerjoin(ProjectRequest, Project.request_id == ProjectRequest.id)
+            .where(
+                or_(
+                    ProjectRequest.client_user_id == auth_user.id,
+                    Project.client_id == client.id,
+                )
+            )
+            .order_by(Project.created_at.desc())
+        )
+        projects = db.scalars(stmt).all()
+        return [_portal_project_dict(p, db) for p in projects]
+
+    # Guest reviewer / direct client portal access: strictly projects for this client_id and workspace_id
     projects = db.scalars(
         select(Project).where(
             Project.client_id == client.id,
@@ -348,7 +481,7 @@ def portal_get_project(
     client_identity=Depends(current_client_identity),
 ):
     client, wid = client_identity
-    project = _get_portal_project(db, project_id, client.id, wid)
+    project = _get_portal_project(db, project_id, client, wid)
     base = _portal_project_dict(project, db)
 
     # All versions
@@ -413,7 +546,7 @@ async def draft_portal_feedback(
     client_identity=Depends(current_client_identity),
 ):
     client, wid = client_identity
-    _get_portal_project(db, project_id, client.id, wid)
+    _get_portal_project(db, project_id, client, wid)
 
     items = []
     ambiguities = []
@@ -501,7 +634,7 @@ async def submit_portal_feedback(
     client_identity=Depends(current_client_identity),
 ):
     client, wid = client_identity
-    project = _get_portal_project(db, project_id, client.id, wid)
+    project = _get_portal_project(db, project_id, client, wid)
 
     structured_json = json.dumps([item.model_dump() for item in data.items])
 
@@ -583,20 +716,12 @@ async def upload_portal_voice(
     client_identity=Depends(current_client_identity),
 ):
     client, wid = client_identity
-    project = _get_portal_project(db, project_id, client.id, wid)
+    project = _get_portal_project(db, project_id, client, wid)
 
-    safe_name = Path(file.filename or "voice_feedback.webm").name[:255]
     content = await file.read(settings.max_upload_bytes + 1)
-    if not content or len(content) > settings.max_upload_bytes:
-        raise HTTPException(413, "Voice audio file is empty or exceeds the upload size limit")
-
-    content_type = file.content_type or mimetypes.guess_type(safe_name)[0] or "audio/webm"
-    allowed_audio = {
-        "audio/mpeg", "audio/wav", "audio/x-wav", "audio/webm", "audio/ogg",
-        "audio/aac", "audio/mp4", "audio/x-m4a", "video/webm", "application/octet-stream"
-    }
-    if content_type not in allowed_audio:
-        raise HTTPException(415, "Unsupported audio recording format")
+    safe_name, content_type = validate_upload_security(file.filename or "voice_feedback.webm", content)
+    if not (content_type.startswith("audio/") or content_type in ("video/webm", "video/mp4")):
+        raise HTTPException(415, "Voice upload must be an audio or webm/mp4 recording")
 
     folder = Path(settings.upload_dir).resolve() / str(wid) / str(project.id)
     folder.mkdir(parents=True, exist_ok=True)
@@ -641,7 +766,7 @@ def list_portal_comments(
     client_identity=Depends(current_client_identity),
 ):
     client, wid = client_identity
-    project = _get_portal_project(db, project_id, client.id, wid)
+    project = _get_portal_project(db, project_id, client, wid)
     comments = db.scalars(
         select(VideoComment).where(
             VideoComment.project_id == project.id,
@@ -659,7 +784,7 @@ def add_portal_comment(
     client_identity=Depends(current_client_identity),
 ):
     client, wid = client_identity
-    project = _get_portal_project(db, project_id, client.id, wid)
+    project = _get_portal_project(db, project_id, client, wid)
 
     comment = VideoComment(
         workspace_id=wid,
@@ -687,7 +812,7 @@ def update_portal_comment_status(
     client_identity=Depends(current_client_identity),
 ):
     client, wid = client_identity
-    _get_portal_project(db, project_id, client.id, wid)
+    _get_portal_project(db, project_id, client, wid)
     comment = db.scalar(
         select(VideoComment).where(
             VideoComment.id == comment_id,
@@ -714,7 +839,7 @@ def submit_portal_decision(
     client_identity=Depends(current_client_identity),
 ):
     client, wid = client_identity
-    project = _get_portal_project(db, project_id, client.id, wid)
+    project = _get_portal_project(db, project_id, client, wid)
 
     version = None
     if data.version_id:
@@ -775,7 +900,7 @@ def list_portal_feedback(
     client_identity=Depends(current_client_identity),
 ):
     client, wid = client_identity
-    project = _get_portal_project(db, project_id, client.id, wid)
+    project = _get_portal_project(db, project_id, client, wid)
     stmt = select(ClientFeedbackSubmission).where(
         ClientFeedbackSubmission.project_id == project.id,
         ClientFeedbackSubmission.workspace_id == wid,

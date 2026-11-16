@@ -1,7 +1,10 @@
 "use client";
+
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { ArrowRight } from "lucide-react";
+import { AuthLayout } from "@/components/shared/auth-layout";
 
 export default function AgencyRegisterPage() {
   const router = useRouter();
@@ -38,99 +41,95 @@ export default function AgencyRegisterPage() {
     }
   };
 
-  return (
-    <div className="min-h-screen bg-gray-950 flex flex-col items-center justify-center px-4">
-      <div className="w-full max-w-md">
-        <div className="text-center mb-8">
-          <Link href="/" className="text-2xl font-bold">
-            <span className="text-white">FRAME</span>
-            <span className="text-purple-400">OPS</span>
-          </Link>
-          <h1 className="text-white text-2xl font-semibold mt-4">Register your agency</h1>
-          <p className="text-gray-400 text-sm mt-1">
-            Build your profile, get discovered, and streamline client production
-          </p>
-        </div>
-
-        <form onSubmit={handleSubmit} className="bg-gray-900 border border-gray-800 rounded-2xl p-8 space-y-4">
-          {error && (
-            <div className="bg-red-900/30 border border-red-700/50 rounded-lg p-3 text-red-300 text-sm">
-              {error}
-            </div>
-          )}
-
-          <div>
-            <label className="block text-gray-300 text-sm font-medium mb-1">Agency Name</label>
-            <input
-              type="text"
-              required
-              minLength={2}
-              value={form.agency_name}
-              onChange={(e) => setForm((f) => ({ ...f, agency_name: e.target.value }))}
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-purple-500"
-              placeholder="e.g. Apex Visuals Studio"
-            />
-          </div>
-
-          <div>
-            <label className="block text-gray-300 text-sm font-medium mb-1">Your Full Name</label>
-            <input
-              type="text"
-              required
-              value={form.full_name}
-              onChange={(e) => setForm((f) => ({ ...f, full_name: e.target.value }))}
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-purple-500"
-              placeholder="Agency Owner name"
-            />
-          </div>
-
-          <div>
-            <label className="block text-gray-300 text-sm font-medium mb-1">Work Email</label>
-            <input
-              type="email"
-              required
-              value={form.email}
-              onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-purple-500"
-              placeholder="owner@agency.com"
-            />
-          </div>
-
-          <div>
-            <label className="block text-gray-300 text-sm font-medium mb-1">Password</label>
-            <input
-              type="password"
-              required
-              minLength={8}
-              value={form.password}
-              onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-purple-500"
-              placeholder="At least 8 characters"
-            />
-          </div>
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full py-3 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-white font-medium text-sm transition-colors"
-          >
-            {loading ? "Registering…" : "Register Agency Workspace"}
-          </button>
-        </form>
-
-        <p className="text-center text-gray-500 text-sm mt-4">
-          Already registered?{" "}
-          <Link href="/agency/login" className="text-purple-400 hover:text-purple-300">
-            Sign in
-          </Link>
-        </p>
-        <p className="text-center text-gray-600 text-xs mt-2">
-          Are you a client?{" "}
-          <Link href="/client/register" className="text-blue-400 hover:text-blue-300">
-            Client registration →
-          </Link>
-        </p>
+  const footer = (
+    <div style={{ textAlign: "center", fontSize: "11px", color: "var(--muted)", display: "flex", flexDirection: "column", gap: "8px" }}>
+      <div>
+        Already have an agency workspace?{" "}
+        <Link href="/agency/login" style={{ color: "var(--violet)", fontWeight: 500 }}>
+          Sign in here →
+        </Link>
+      </div>
+      <div>
+        Are you a client looking to hire agencies?{" "}
+        <Link href="/client/register" style={{ color: "var(--muted)", textDecoration: "underline" }}>
+          Client registration
+        </Link>
       </div>
     </div>
+  );
+
+  return (
+    <AuthLayout
+      eyebrow="AGENCY WORKSPACE ONBOARDING"
+      title="Register Your Agency"
+      subtitle="Establish your agency studio workspace, publish your profile, and receive client briefs."
+      footer={footer}
+    >
+      <form onSubmit={handleSubmit} className="stack-form">
+        {error && <div className="error-box">{error}</div>}
+
+        <label>
+          Agency Name
+          <input
+            type="text"
+            name="agency_name"
+            required
+            minLength={2}
+            value={form.agency_name}
+            onChange={(e) => setForm((f) => ({ ...f, agency_name: e.target.value }))}
+            placeholder="e.g. Apex Visuals Studio"
+          />
+        </label>
+
+        <label>
+          Your Full Name
+          <input
+            type="text"
+            name="full_name"
+            required
+            value={form.full_name}
+            onChange={(e) => setForm((f) => ({ ...f, full_name: e.target.value }))}
+            placeholder="e.g. Alex Rivera"
+          />
+        </label>
+
+        <label>
+          Work Email
+          <input
+            type="email"
+            name="email"
+            required
+            autoComplete="email"
+            value={form.email}
+            onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+            placeholder="owner@agency.com"
+          />
+        </label>
+
+        <label>
+          Password
+          <input
+            type="password"
+            name="password"
+            required
+            minLength={8}
+            autoComplete="new-password"
+            value={form.password}
+            onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
+            placeholder="At least 8 characters"
+          />
+        </label>
+
+        <button
+          type="submit"
+          disabled={loading}
+          className="primary-button full"
+          style={{ height: "42px" }}
+        >
+          {loading ? "Creating workspace…" : "Create Agency Workspace"}
+          <ArrowRight size={16} />
+        </button>
+      </form>
+    </AuthLayout>
   );
 }

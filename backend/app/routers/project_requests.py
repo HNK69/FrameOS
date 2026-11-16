@@ -14,6 +14,7 @@ from ..db import get_db
 from ..models import (
     AgencyProfile,
     Client,
+    ClientPortalAccess,
     Membership,
     Project,
     ProjectMessage,
@@ -318,6 +319,25 @@ def accept_proposal(
         request_id=req.id,
     )
     db.add(project)
+
+    portal_access = db.scalar(
+        select(ClientPortalAccess).where(
+            ClientPortalAccess.client_id == client.id,
+            ClientPortalAccess.workspace_id == agency_workspace_id,
+        )
+    )
+    if not portal_access:
+        prefix = ((current_user.full_name or "CLIENT")[:4]).upper()
+        code = f"{prefix}-{uuid4().hex[:6].upper()}"
+        portal_access = ClientPortalAccess(
+            workspace_id=agency_workspace_id,
+            client_id=client.id,
+            access_token=f"portal-{client.id}-{uuid4().hex}",
+            passcode=code,
+            client_email=current_user.email.lower(),
+        )
+        db.add(portal_access)
+
     db.commit()
     db.refresh(project)
 

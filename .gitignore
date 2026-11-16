@@ -22,6 +22,7 @@ backend/tests/__pycache__/
 backend/frameops.db
 frameops.db
 backend/frameops.db.backup_*
+backend/frameops.db.pristine_backup
 backend/frameops_rehearse.db*
 backend/frameops.db-shm
 backend/frameops.db-wal

@@ -1,14 +1,16 @@
 """Authentication Router: Client and Agency Registration, Login, Logout, Status, Setup, and Identity."""
 
 from typing import Any
+from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Response, status
+from fastapi.security import HTTPAuthorizationCredentials
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..config import settings
 from ..db import get_db
-from ..models import AgencyProfile, ClientProfile, Membership, User, Workspace
+from ..models import AgencyProfile, Client, ClientPortalAccess, ClientProfile, Membership, User, Workspace
 from ..schemas import (
     AgencyRegisterInput,
     AuthResponse,
@@ -18,12 +20,15 @@ from ..schemas import (
     UserResponse,
 )
 from ..security import (
+    bearer,
     clear_auth_cookies,
     get_current_user,
     hash_password,
     issue_client_session_token,
     issue_token,
+    rate_limit_auth,
     set_auth_cookie,
+    token_revocation_store,
     verify_password,
 )
 
@@ -95,6 +100,7 @@ def register_client(
     data: ClientRegisterInput,
     response: Response,
     db: Session = Depends(get_db),
+    _rl: None = Depends(rate_limit_auth),
 ) -> AuthResponse:
     """Public Client Registration: Creates User(role='client') and ClientProfile."""
     if not settings.auth_secret:
@@ -116,11 +122,15 @@ def register_client(
     db.add(user)
     db.flush()
 
-    profile = ClientProfile(
-        user_id=user.id,
-        company_name=company_name,
-    )
-    db.add(profile)
+    profile = db.scalar(select(ClientProfile).where(ClientProfile.user_id == user.id))
+    if profile:
+        profile.company_name = company_name
+    else:
+        profile = ClientProfile(
+            user_id=user.id,
+            company_name=company_name,
+        )
+        db.add(profile)
     db.commit()
     db.refresh(user)
 
@@ -148,6 +158,7 @@ def register_agency(
     data: AgencyRegisterInput,
     response: Response,
     db: Session = Depends(get_db),
+    _rl: None = Depends(rate_limit_auth),
 ) -> AuthResponse:
     """Public Agency Registration: Creates User(role='agency_owner'), Workspace, Membership & AgencyProfile."""
     if not settings.auth_secret:
@@ -211,6 +222,7 @@ def login(
     data: LoginInput,
     response: Response,
     db: Session = Depends(get_db),
+    _rl: None = Depends(rate_limit_auth),
 ) -> AuthResponse:
     """Role-aware user authentication: Validates credentials and sets persona session cookie."""
     if not settings.auth_secret:
@@ -260,8 +272,16 @@ def login(
 
 
 @router.post("/api/auth/logout")
-def logout(response: Response) -> dict[str, Any]:
-    """Logs out current user and clears all persona session cookies."""
+def logout(
+    response: Response,
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
+    frameops_session: str | None = Cookie(default=None),
+    frameops_client_session: str | None = Cookie(default=None),
+) -> dict[str, Any]:
+    """Logs out current user, revokes JWT session tokens server-side, and clears all session cookies."""
+    for token in (credentials.credentials if credentials else None, frameops_session, frameops_client_session):
+        if token:
+            token_revocation_store.revoke(token)
     clear_auth_cookies(response)
     return {"logged_out": True, "message": "Logged out successfully"}
 

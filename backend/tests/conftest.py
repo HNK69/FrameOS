@@ -72,6 +72,18 @@ def guard_production_db() -> Generator[None, None, None]:
         )
 
 
+@pytest.fixture(autouse=True)
+def isolate_rate_limiter_and_revocations() -> Generator[None, None, None]:
+    """Ensures each test has an isolated rate-limiter and revocation state."""
+    from app.security import auth_rate_limiter, token_revocation_store
+
+    auth_rate_limiter.reset()
+    token_revocation_store.reset()
+    yield
+    auth_rate_limiter.reset()
+    token_revocation_store.reset()
+
+
 @pytest.fixture
 def isolated_db(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Generator[sessionmaker[Session], None, None]:
     """Provides an isolated in-memory SQLite database for the test duration.

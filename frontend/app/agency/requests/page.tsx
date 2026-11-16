@@ -1,7 +1,27 @@
 "use client";
+
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import {
+  ArrowRight,
+  Calendar,
+  Clock,
+  DollarSign,
+  FileText,
+  Filter,
+  Film,
+  FolderKanban,
+  Inbox,
+  LayoutDashboard,
+  Layers,
+  Sparkles,
+  Tv,
+} from "lucide-react";
+import { AppLayout } from "@/components/shared/app-layout";
+import { PageHeader } from "@/components/shared/page-header";
+import { StatusPill } from "@/components/shared/status-pill";
+import { EmptyState } from "@/components/shared/empty-state";
 
 interface ProjectRequest {
   id: number;
@@ -20,15 +40,6 @@ interface ProjectRequest {
   proposals_count: number;
   created_at: string;
 }
-
-const STATUS_PILLS: Record<string, string> = {
-  submitted: "bg-blue-900/40 text-blue-300 border-blue-700/50",
-  under_review: "bg-yellow-900/40 text-yellow-300 border-yellow-700/50",
-  proposal_received: "bg-purple-900/40 text-purple-300 border-purple-700/50",
-  accepted: "bg-green-900/40 text-green-300 border-green-700/50",
-  declined: "bg-red-900/40 text-red-300 border-red-700/50",
-  cancelled: "bg-gray-800 text-gray-400 border-gray-700",
-};
 
 export default function AgencyRequestsInboxPage() {
   const router = useRouter();
@@ -55,137 +66,183 @@ export default function AgencyRequestsInboxPage() {
     loadRequests();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const filtered = filter === "all"
-    ? requests
-    : requests.filter((r) => r.status === filter);
+  const filtered =
+    filter === "all" ? requests : requests.filter((r) => r.status === filter);
+
+  if (loading) {
+    return (
+      <AppLayout persona="agency">
+        <div className="loading-line">Opening Incoming Requests…</div>
+      </AppLayout>
+    );
+  }
+
+  const filterAction = (
+    <div className="filter-pills">
+      {["all", "submitted", "under_review", "accepted", "declined"].map((s) => {
+        const count =
+          s === "all"
+            ? requests.length
+            : requests.filter((r) => r.status === s).length;
+        return (
+          <button
+            key={s}
+            className={filter === s ? "chosen" : ""}
+            onClick={() => setFilter(s)}
+          >
+            {s.replace("_", " ")}
+            <span>{count}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
 
   return (
-    <div className="min-h-screen bg-gray-950 text-white">
-      {/* Top Navbar */}
-      <nav className="border-b border-gray-800 px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Link href="/" className="text-xl font-bold">
-            <span className="text-white">FRAME</span>
-            <span className="text-purple-400">OPS</span>
-          </Link>
-          <span className="text-xs bg-purple-900/50 text-purple-300 border border-purple-700/50 px-2 py-0.5 rounded">
-            Agency Studio
-          </span>
-        </div>
-        <div className="flex items-center gap-3">
-          <Link href="/agency/dashboard" className="text-sm text-gray-400 hover:text-white">
-            Dashboard
-          </Link>
-          <Link href="/agency/profile" className="text-sm text-gray-400 hover:text-white">
-            Agency Profile
-          </Link>
-          <Link href="/clients" className="text-sm text-gray-400 hover:text-white">
-            Clients & Projects
-          </Link>
-        </div>
-      </nav>
+    <AppLayout persona="agency">
+      <PageHeader
+        eyebrow="WORKSPACE / REQUESTS"
+        title="Incoming Project Requests"
+        description="Review incoming client briefs, submit custom proposals, and establish active production projects."
+        actions={filterAction}
+      />
 
-      <div className="max-w-5xl mx-auto px-6 py-8">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
-          <div>
-            <h1 className="text-2xl font-bold">Incoming Project Requests</h1>
-            <p className="text-gray-400 text-sm mt-1">
-              Review incoming client briefs, submit custom proposals, and establish active production projects.
-            </p>
-          </div>
-
-          <div className="flex gap-2">
-            {["all", "submitted", "under_review", "accepted", "declined"].map((s) => (
-              <button
-                key={s}
-                onClick={() => setFilter(s)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium border capitalize transition-colors ${
-                  filter === s
-                    ? "bg-purple-900/40 text-purple-200 border-purple-600"
-                    : "bg-gray-900 text-gray-400 border-gray-800 hover:text-gray-200"
-                }`}
-              >
-                {s.replace("_", " ")}
+      {filtered.length === 0 ? (
+        <EmptyState
+          icon={Inbox}
+          title={filter === "all" ? "No incoming requests yet" : `No requests marked "${filter.replace("_", " ")}"`}
+          body={
+            filter === "all"
+              ? "When clients discover your agency in the catalog, their project briefs will arrive here."
+              : "Try switching filters to view other project briefs."
+          }
+          action={
+            filter !== "all" ? (
+              <button className="small-action" onClick={() => setFilter("all")}>
+                View all requests <ArrowRight size={13} />
               </button>
-            ))}
-          </div>
-        </div>
-
-        {loading ? (
-          <div className="text-gray-400 text-center py-12">Loading requests…</div>
-        ) : filtered.length === 0 ? (
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-12 text-center text-gray-500">
-            <div className="text-4xl mb-3">📬</div>
-            <div className="font-medium text-white mb-1">No requests found</div>
-            <p className="text-sm text-gray-400 max-w-sm mx-auto">
-              {filter === "all"
-                ? "When clients discover your agency in the catalog, their briefs will arrive here."
-                : `No requests with status "${filter}".`}
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {filtered.map((req) => (
-              <Link
-                key={req.id}
-                href={`/agency/requests/${req.id}`}
-                className="block bg-gray-900 border border-gray-800 hover:border-gray-700 rounded-xl p-6 transition-colors"
+            ) : (
+              <Link className="small-action" href="/agency/profile">
+                Publish agency profile to catalog <ArrowRight size={13} />
+              </Link>
+            )
+          }
+        />
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+          {filtered.map((req) => (
+            <Link
+              key={req.id}
+              href={`/agency/requests/${req.id}`}
+              className="panel"
+              style={{
+                padding: "20px 22px",
+                display: "block",
+                transition: "all .2s ease",
+                textDecoration: "none",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "flex-start",
+                  gap: "16px",
+                  flexWrap: "wrap",
+                }}
               >
-                <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-3 mb-1">
-                      <h2 className="text-lg font-semibold text-white">{req.title}</h2>
-                      <span
-                        className={`text-xs px-2.5 py-0.5 rounded-full border font-medium ${
-                          STATUS_PILLS[req.status] || "bg-gray-800 text-gray-400 border-gray-700"
-                        }`}
-                      >
-                        {req.status.replace("_", " ")}
-                      </span>
-                    </div>
-
-                    <p className="text-sm text-gray-400 mb-3">
-                      From: <span className="text-gray-200 font-medium">{req.client_name || `Client #${req.client_user_id}`}</span>
-                    </p>
-
-                    {req.description && (
-                      <p className="text-sm text-gray-300 line-clamp-2 mb-3">
-                        {req.description}
-                      </p>
-                    )}
-
-                    <div className="flex flex-wrap gap-4 text-xs text-gray-400">
-                      {req.video_type && (
-                        <span>Type: <span className="text-gray-200">{req.video_type}</span></span>
-                      )}
-                      {req.target_platform && (
-                        <span>Platform: <span className="text-gray-200">{req.target_platform}</span></span>
-                      )}
-                      {req.budget && (
-                        <span>Budget: <span className="text-gray-200">{req.budget}</span></span>
-                      )}
-                      {req.deadline && (
-                        <span>Deadline: <span className="text-gray-200">{new Date(req.deadline).toLocaleDateString()}</span></span>
-                      )}
-                    </div>
+                <div style={{ flex: 1, minWidth: "280px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "8px" }}>
+                    <h2 style={{ margin: 0, font: "600 16px var(--display)", color: "#fff" }}>
+                      {req.title}
+                    </h2>
+                    <StatusPill status={req.status} />
                   </div>
 
-                  <div className="flex flex-col sm:items-end justify-between self-stretch gap-2">
-                    <div className="text-xs text-purple-400 font-medium">
-                      {req.proposals_count > 0 ? `${req.proposals_count} Proposal submitted` : "Action needed →"}
-                    </div>
-                    {req.project_id && (
-                      <span className="text-xs text-green-400 font-medium">
-                        ✓ Active Project #{req.project_id}
+                  <div style={{ fontSize: "11px", color: "#a5a9bd", marginBottom: "8px" }}>
+                    Client: <b style={{ color: "#e2e3ec" }}>{req.client_name || `Client #${req.client_user_id}`}</b>
+                  </div>
+
+                  {req.description && (
+                    <p
+                      style={{
+                        margin: "0 0 12px",
+                        fontSize: "12px",
+                        color: "#9498ab",
+                        lineHeight: 1.5,
+                        display: "-webkit-box",
+                        WebkitLineClamp: 2,
+                        WebkitBoxOrient: "vertical",
+                        overflow: "hidden",
+                      }}
+                    >
+                      {req.description}
+                    </p>
+                  )}
+
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "14px", fontSize: "11px", color: "#85899d" }}>
+                    {req.video_type && (
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: "5px" }}>
+                        <Film size={13} color="var(--violet)" /> {req.video_type}
+                      </span>
+                    )}
+                    {req.target_platform && (
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: "5px" }}>
+                        <Tv size={13} color="var(--violet)" /> {req.target_platform}
+                      </span>
+                    )}
+                    {req.budget && (
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: "5px" }}>
+                        <DollarSign size={13} color="var(--green)" /> {req.budget}
+                      </span>
+                    )}
+                    {req.deadline && (
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: "5px" }}>
+                        <Calendar size={13} color="#a57bd4" /> Due: {new Date(req.deadline).toLocaleDateString()}
                       </span>
                     )}
                   </div>
                 </div>
-              </Link>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
+
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "flex-end",
+                    justifyContent: "space-between",
+                    gap: "10px",
+                  }}
+                >
+                  <div style={{ fontSize: "11px", color: "var(--violet)", fontWeight: 600 }}>
+                    {req.proposals_count > 0
+                      ? `${req.proposals_count} Proposal submitted`
+                      : "Review & Submit Proposal →"}
+                  </div>
+
+                  {req.project_id && (
+                    <span
+                      style={{
+                        padding: "3px 8px",
+                        borderRadius: "6px",
+                        fontSize: "10px",
+                        fontFamily: "var(--mono)",
+                        background: "rgba(75,214,160,.12)",
+                        border: "1px solid rgba(75,214,160,.35)",
+                        color: "#5be3aa",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "4px",
+                      }}
+                    >
+                      ✓ Active Project #{req.project_id}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </Link>
+          ))}
+        </div>
+      )}
+    </AppLayout>
   );
 }

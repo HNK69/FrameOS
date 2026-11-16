@@ -1,7 +1,20 @@
 "use client";
+
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import {
+  ArrowRight,
+  ExternalLink,
+  Globe,
+  Mail,
+  Search,
+  Sparkles,
+  Video,
+} from "lucide-react";
+import { AppLayout } from "@/components/shared/app-layout";
+import { PageHeader } from "@/components/shared/page-header";
+import { EmptyState } from "@/components/shared/empty-state";
 
 interface Agency {
   workspace_id: number;
@@ -35,7 +48,9 @@ export default function AgenciesPage() {
     }
   };
 
-  useEffect(() => { fetchAgencies(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    fetchAgencies();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -43,97 +58,174 @@ export default function AgenciesPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-950 text-white">
-      <nav className="border-b border-gray-800 px-6 py-4 flex items-center justify-between">
-        <Link href="/" className="text-xl font-bold">
-          <span className="text-white">FRAME</span><span className="text-blue-400">OPS</span>
-        </Link>
-        <div className="flex gap-3">
-          <Link href="/client/dashboard" className="text-sm text-gray-400 hover:text-white transition-colors">
-            ← Dashboard
-          </Link>
-        </div>
-      </nav>
+    <AppLayout persona="client">
+      <PageHeader
+        eyebrow="CLIENT / DISCOVERY"
+        title="Agency Catalog"
+        description="Discover specialized video editing studios, explore verified portfolios, and submit targeted project briefs."
+      />
 
-      <div className="max-w-5xl mx-auto px-6 py-8">
-        <h1 className="text-2xl font-semibold mb-2">Browse Agencies</h1>
-        <p className="text-gray-400 text-sm mb-6">
-          Discover video production agencies and submit your project brief.
-        </p>
+      {/* Search Bar Panel */}
+      <div className="panel" style={{ padding: "16px 20px", marginBottom: "20px" }}>
+        <form onSubmit={handleSearch} style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+          <div className="search-box" style={{ flex: "1 1 280px" }}>
+            <Search size={15} />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search agencies by name, style, or creative focus…"
+            />
+          </div>
 
-        {/* Search */}
-        <form onSubmit={handleSearch} className="flex gap-3 mb-8">
-          <input
-            type="text"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Search by name, description, tagline…"
-            className="flex-1 bg-gray-900 border border-gray-700 rounded-lg px-4 py-2.5 text-white text-sm focus:outline-none focus:border-blue-500"
-          />
-          <input
-            type="text"
-            value={specialization}
-            onChange={e => setSpecialization(e.target.value)}
-            placeholder="Specialization…"
-            className="w-48 bg-gray-900 border border-gray-700 rounded-lg px-4 py-2.5 text-white text-sm focus:outline-none focus:border-blue-500"
-          />
-          <button
-            type="submit"
-            className="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 rounded-lg text-sm font-medium transition-colors"
-          >
-            Search
+          <div className="search-box" style={{ flex: "0 1 220px" }}>
+            <Video size={15} />
+            <input
+              type="text"
+              value={specialization}
+              onChange={(e) => setSpecialization(e.target.value)}
+              placeholder="Specialization (e.g. YouTube, 3D)…"
+            />
+          </div>
+
+          <button type="submit" className="primary-button" style={{ height: "35px" }}>
+            <Search size={14} /> Search Catalog
           </button>
         </form>
-
-        {/* Results */}
-        {loading ? (
-          <div className="text-gray-400 text-center py-16">Loading agencies…</div>
-        ) : agencies.length === 0 ? (
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-12 text-center text-gray-500">
-            <div className="text-4xl mb-3">🔍</div>
-            <div className="font-medium mb-1">No agencies found</div>
-            <div className="text-sm">Try adjusting your search terms.</div>
-          </div>
-        ) : (
-          <div className="grid gap-4">
-            {agencies.map((agency) => (
-              <Link
-                key={agency.workspace_id}
-                href={`/client/agencies/${agency.workspace_id}`}
-                className="block bg-gray-900 border border-gray-800 hover:border-gray-700 rounded-xl p-6 transition-colors"
-              >
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex-1">
-                    <h2 className="text-lg font-semibold">{agency.name}</h2>
-                    {agency.tagline && (
-                      <p className="text-blue-400 text-sm mt-0.5">{agency.tagline}</p>
-                    )}
-                    {agency.description && (
-                      <p className="text-gray-400 text-sm mt-2 line-clamp-2">{agency.description}</p>
-                    )}
-
-                    <div className="flex flex-wrap gap-2 mt-3">
-                      {agency.specializations.slice(0, 4).map((s) => (
-                        <span key={s} className="text-xs bg-blue-900/30 text-blue-300 border border-blue-800/50 rounded-full px-2.5 py-0.5">
-                          {s}
-                        </span>
-                      ))}
-                      {agency.services.slice(0, 3).map((s) => (
-                        <span key={s} className="text-xs bg-gray-800 text-gray-400 rounded-full px-2.5 py-0.5">
-                          {s}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="text-blue-400 text-sm font-medium whitespace-nowrap">
-                    View →
-                  </div>
-                </div>
-              </Link>
-            ))}
-          </div>
-        )}
       </div>
-    </div>
+
+      {/* Results Grid */}
+      {loading ? (
+        <div className="loading-line">Searching published agencies…</div>
+      ) : agencies.length === 0 ? (
+        <EmptyState
+          icon={Sparkles}
+          title="No agencies match your criteria"
+          body="Try broadening your search keywords or clearing the specialization filter."
+          action={
+            (search || specialization) && (
+              <button
+                className="small-action"
+                onClick={() => {
+                  setSearch("");
+                  setSpecialization("");
+                  fetchAgencies();
+                }}
+              >
+                Clear all filters <ArrowRight size={13} />
+              </button>
+            )
+          }
+        />
+      ) : (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(360px, 1fr))", gap: "16px" }}>
+          {agencies.map((agency) => (
+            <Link
+              key={agency.workspace_id}
+              href={`/client/agencies/${agency.workspace_id}`}
+              className="panel"
+              style={{
+                padding: "22px",
+                display: "flex",
+                flexDirection: "column",
+                textDecoration: "none",
+                transition: "all .2s ease",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "12px" }}>
+                <div className="client-monogram large">
+                  {agency.name.slice(0, 1).toUpperCase()}
+                </div>
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <h2
+                    style={{
+                      margin: 0,
+                      font: "600 15px var(--display)",
+                      color: "#fff",
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                    }}
+                  >
+                    {agency.name}
+                  </h2>
+                  {agency.tagline && (
+                    <p
+                      style={{
+                        margin: "2px 0 0",
+                        fontSize: "11px",
+                        color: "var(--violet)",
+                        whiteSpace: "nowrap",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                      }}
+                    >
+                      {agency.tagline}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {agency.description && (
+                <p
+                  style={{
+                    margin: "0 0 14px",
+                    fontSize: "11px",
+                    color: "#9295aa",
+                    lineHeight: 1.5,
+                    display: "-webkit-box",
+                    WebkitLineClamp: 2,
+                    WebkitBoxOrient: "vertical",
+                    overflow: "hidden",
+                    flex: 1,
+                  }}
+                >
+                  {agency.description}
+                </p>
+              )}
+
+              <div className="chip-container" style={{ marginTop: "auto", marginBottom: "14px" }}>
+                {agency.specializations?.slice(0, 3).map((s) => (
+                  <span key={s} className="chip-badge" style={{ fontSize: "10px" }}>
+                    {s}
+                  </span>
+                ))}
+                {agency.services?.slice(0, 2).map((s) => (
+                  <span
+                    key={s}
+                    className="chip-badge"
+                    style={{
+                      fontSize: "10px",
+                      background: "rgba(255,255,255,.04)",
+                      borderColor: "rgba(255,255,255,.1)",
+                      color: "#cbd5e1",
+                    }}
+                  >
+                    {s}
+                  </span>
+                ))}
+              </div>
+
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  paddingTop: "12px",
+                  borderTop: "1px solid var(--line)",
+                  fontSize: "11px",
+                  color: "#8a8ea2",
+                }}
+              >
+                <span>View studio profile</span>
+                <span style={{ color: "var(--violet)", fontWeight: 600, display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                  Explore <ArrowRight size={13} />
+                </span>
+              </div>
+            </Link>
+          ))}
+        </div>
+      )}
+    </AppLayout>
   );
 }

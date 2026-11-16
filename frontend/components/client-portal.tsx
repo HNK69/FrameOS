@@ -12,6 +12,7 @@ import {
   CheckCircle2,
   ChevronDown,
   Clock,
+  Compass,
   ExternalLink,
   Eye,
   FileAudio,
@@ -22,6 +23,7 @@ import {
   HelpCircle,
   Info,
   Layers,
+  LayoutDashboard,
   Lock,
   LogOut,
   Maximize2,
@@ -128,6 +130,9 @@ export type PortalProject = {
 export function ClientPortal({ initialProjectId }: { initialProjectId?: number }) {
   const [token, setToken] = useState<string>("");
   const [client, setClient] = useState<PortalClient | null>(null);
+  const [marketplaceUser, setMarketplaceUser] = useState<{ id: number; email: string; full_name: string; company_name: string } | null>(null);
+  const [passcodeEntry, setPasscodeEntry] = useState("");
+  const [passcodeSubmitting, setPasscodeSubmitting] = useState(false);
   const [loading, setLoading] = useState(true);
   const [projects, setProjects] = useState<PortalProject[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<number | null>(initialProjectId || null);
@@ -162,12 +167,25 @@ export function ClientPortal({ initialProjectId }: { initialProjectId?: number }
       fetchClientData(effectiveToken);
     } else {
       // Try cookie-based session
-      api<{ client: PortalClient }>("/api/portal/auth/me")
-        .then((res) => {
-          setClient(res.client);
-          loadProjects();
+      api<{ client: PortalClient | null; has_engagement?: boolean; authenticated?: boolean; user?: { id: number; email: string; full_name: string; company_name: string } }>("/api/portal/auth/me")
+        .then(async (res) => {
+          if (res.client) {
+            setClient(res.client);
+            setMarketplaceUser(res.user || null);
+            await loadProjects();
+          } else if (res.authenticated && res.user) {
+            setClient(null);
+            setMarketplaceUser(res.user);
+          } else {
+            setClient(null);
+            setMarketplaceUser(null);
+          }
         })
         .catch(() => {
+          setClient(null);
+          setMarketplaceUser(null);
+        })
+        .finally(() => {
           setLoading(false);
         });
     }
@@ -190,19 +208,52 @@ export function ClientPortal({ initialProjectId }: { initialProjectId?: number }
         }
       } catch {
         // Fallback to me
-        const meRes = await api<{ client: PortalClient }>("/api/portal/auth/me", {
+        const meRes = await api<{ client: PortalClient | null; has_engagement?: boolean; authenticated?: boolean; user?: any }>("/api/portal/auth/me", {
           headers: { "X-Portal-Token": authToken, Authorization: `Bearer ${authToken}` },
         });
-        authedClient = meRes.client;
+        if (meRes.client) {
+          authedClient = meRes.client;
+          setMarketplaceUser(meRes.user || null);
+        } else if (meRes.authenticated && meRes.user) {
+          setMarketplaceUser(meRes.user);
+          authedClient = null;
+        }
       }
 
       setClient(authedClient);
-      await loadProjects(authToken);
+      if (authedClient) {
+        await loadProjects(authToken);
+      }
     } catch (e: any) {
       setErrorNotice(e.message || "Failed to authenticate client portal access.");
       setClient(null);
+      setMarketplaceUser(null);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handlePasscodeSubmit(code: string) {
+    if (!code.trim()) return;
+    setPasscodeSubmitting(true);
+    setErrorNotice("");
+    try {
+      const res = await api<any>("/api/portal/auth/login", {
+        ...json("POST", { code: code.trim() }),
+        headers: { "X-Portal-Token": code.trim() },
+      });
+      if (res.token) {
+        localStorage.setItem("frameops_portal_token", res.token);
+        setToken(res.token);
+      }
+      setClient(res.client);
+      setMarketplaceUser(null);
+      await loadProjects(res.token);
+      setNotice("Successfully connected to agency project portal.");
+    } catch (e: any) {
+      setErrorNotice(e.message || "Invalid agency passcode");
+    } finally {
+      setPasscodeSubmitting(false);
     }
   }
 
@@ -215,15 +266,21 @@ export function ClientPortal({ initialProjectId }: { initialProjectId?: number }
     }
     try {
       const projs = await api<PortalProject[]>("/api/portal/projects", { headers });
-      setProjects(projs);
-      if (projs.length > 0) {
+      setProjects(projs || []);
+      if (projs && projs.length > 0) {
         const match = selectedProjectId ? projs.find((p) => p.id === selectedProjectId) : projs[0];
         const chosen = match || projs[0];
         setSelectedProjectId(chosen.id);
         await loadProjectDetail(chosen.id, t);
+      } else {
+        setSelectedProjectId(null);
+        setActiveProject(null);
       }
     } catch (e: any) {
       setErrorNotice(e.message);
+      setProjects([]);
+      setSelectedProjectId(null);
+      setActiveProject(null);
     }
   }
 
@@ -254,6 +311,7 @@ export function ClientPortal({ initialProjectId }: { initialProjectId?: number }
     localStorage.removeItem("frameops_portal_token");
     setToken("");
     setClient(null);
+    setMarketplaceUser(null);
     setActiveProject(null);
     setProjects([]);
   }
@@ -266,6 +324,122 @@ export function ClientPortal({ initialProjectId }: { initialProjectId?: number }
           <span>Accessing FRAMEOPS Secure Client Portal…</span>
         </div>
       </main>
+    );
+  }
+
+  if (marketplaceUser && !client) {
+    return (
+      <div className="portal-shell">
+        <header className="portal-header">
+          <div className="portal-header-left">
+            <Link href="/client/dashboard" className="portal-brand-badge" style={{ textDecoration: "none" }} title="Return to Dashboard">
+              <div className="portal-logo-orb">
+                <span>F</span>
+              </div>
+              <div>
+                <div className="portal-brand-title">FRAMEOPS</div>
+                <div className="portal-brand-sub">CLIENT REVIEW PORTAL</div>
+              </div>
+            </Link>
+
+            <div className="portal-client-chip">
+              <span className="portal-client-avatar">{marketplaceUser.full_name?.slice(0, 1).toUpperCase() || "C"}</span>
+              <div className="portal-client-meta">
+                <b>{marketplaceUser.full_name || marketplaceUser.email}</b>
+                <small>{marketplaceUser.company_name || "Marketplace Client"}</small>
+              </div>
+            </div>
+          </div>
+
+          <div className="portal-header-right">
+            <button className="portal-logout-btn" onClick={logout} title="Sign Out">
+              <LogOut size={15} />
+              <span className="desktop-only">Sign out</span>
+            </button>
+          </div>
+        </header>
+
+        {notice && (
+          <div className="portal-notice">
+            <span>{notice}</span>
+            <button onClick={() => setNotice("")}>
+              <X size={14} />
+            </button>
+          </div>
+        )}
+        {errorNotice && (
+          <div className="portal-error-notice">
+            <AlertCircle size={15} />
+            <span>{errorNotice}</span>
+            <button onClick={() => setErrorNotice("")}>
+              <X size={14} />
+            </button>
+          </div>
+        )}
+
+        <main className="portal-main" style={{ maxWidth: 860, margin: "40px auto", padding: "0 24px" }}>
+          <div className="portal-empty-projects" style={{ padding: "48px 32px", textAlign: "center" }}>
+            <div style={{ width: 56, height: 56, borderRadius: "50%", background: "rgba(139, 92, 246, 0.12)", border: "1px solid rgba(139, 92, 246, 0.3)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 20px" }}>
+              <Compass size={28} style={{ color: "#a78bfa" }} />
+            </div>
+            <h2 style={{ fontSize: "1.5rem", fontWeight: 700, color: "#f8fafc", marginBottom: 10 }}>
+              Welcome to FRAMEOPS, {marketplaceUser.full_name || "Client"}
+            </h2>
+            <p style={{ color: "#94a3b8", maxWidth: 520, margin: "0 auto 28px", lineHeight: 1.6 }}>
+              You are signed in as a verified client. To access project deliverables, video reviews, and revision pipelines, connect with an agency partner or browse available creative agencies.
+            </p>
+            <div style={{ display: "flex", gap: 14, justifyContent: "center", flexWrap: "wrap", marginBottom: 36 }}>
+              <Link
+                href="/client/agencies"
+                className="portal-action-btn portal-btn-approve"
+                style={{ textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 8, padding: "10px 20px" }}
+              >
+                <Compass size={16} />
+                <span>Explore Agency Catalog</span>
+              </Link>
+              <Link
+                href="/client/requests/new"
+                className="portal-action-btn portal-btn-changes"
+                style={{ textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 8, padding: "10px 20px" }}
+              >
+                <FileText size={16} />
+                <span>Submit New Project Brief</span>
+              </Link>
+              <Link
+                href="/client/dashboard"
+                className="portal-quiet-btn"
+                style={{ textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 8, padding: "10px 20px" }}
+              >
+                <LayoutDashboard size={16} />
+                <span>Client Dashboard</span>
+              </Link>
+            </div>
+
+            <div style={{ borderTop: "1px solid rgba(255, 255, 255, 0.08)", paddingTop: 28, maxWidth: 500, margin: "0 auto" }}>
+              <h4 style={{ fontSize: "0.9rem", color: "#cbd5e1", marginBottom: 8 }}>Have an Agency Access Passcode?</h4>
+              <p style={{ fontSize: "0.82rem", color: "#64748b", marginBottom: 16 }}>
+                If an agency provided an access passcode for an external review cut, you can enter it here:
+              </p>
+              <div style={{ display: "flex", gap: 8, maxWidth: 360, margin: "0 auto" }}>
+                <input
+                  type="text"
+                  placeholder="e.g. NOVA-A8F2"
+                  value={passcodeEntry}
+                  onChange={(e) => setPasscodeEntry(e.target.value)}
+                  style={{ flex: 1, background: "rgba(15, 23, 42, 0.6)", border: "1px solid rgba(255, 255, 255, 0.15)", borderRadius: 8, padding: "8px 12px", color: "#fff", fontSize: 13 }}
+                />
+                <button
+                  onClick={() => handlePasscodeSubmit(passcodeEntry)}
+                  disabled={!passcodeEntry.trim() || passcodeSubmitting}
+                  style={{ background: "#7c3aed", color: "#fff", border: "none", borderRadius: 8, padding: "8px 16px", fontSize: 13, cursor: "pointer", fontWeight: 600 }}
+                >
+                  {passcodeSubmitting ? "Connecting..." : "Connect"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </main>
+      </div>
     );
   }
 
@@ -287,7 +461,7 @@ export function ClientPortal({ initialProjectId }: { initialProjectId?: number }
       {/* Top Header */}
       <header className="portal-header">
         <div className="portal-header-left">
-          <div className="portal-brand-badge">
+          <Link href="/client/dashboard" className="portal-brand-badge" style={{ textDecoration: "none" }} title="Return to Dashboard">
             <div className="portal-logo-orb">
               <span>F</span>
             </div>
@@ -295,7 +469,7 @@ export function ClientPortal({ initialProjectId }: { initialProjectId?: number }
               <div className="portal-brand-title">FRAMEOPS</div>
               <div className="portal-brand-sub">CLIENT REVIEW PORTAL</div>
             </div>
-          </div>
+          </Link>
 
           <div className="portal-client-chip">
             <span className="portal-client-avatar">{client.name.slice(0, 1).toUpperCase()}</span>
@@ -332,8 +506,12 @@ export function ClientPortal({ initialProjectId }: { initialProjectId?: number }
         <div className="portal-header-right">
           <button
             className="portal-quiet-btn"
-            onClick={() => {
-              if (selectedProjectId) loadProjectDetail(selectedProjectId);
+            onClick={async () => {
+              if (selectedProjectId) {
+                await loadProjectDetail(selectedProjectId);
+              } else {
+                await loadProjects();
+              }
               setNotice("Refreshed project status and comments.");
             }}
             title="Refresh"
@@ -644,6 +822,22 @@ function PortalAuthGate({ onSuccess }: { onSuccess: (token: string, client: Port
             <ArrowRight size={16} />
           </button>
         </form>
+
+        <div style={{ marginTop: "1rem", textAlign: "center" }}>
+          <Link
+            href="/client/dashboard"
+            style={{
+              color: "rgba(167, 139, 250, 0.9)",
+              fontSize: "0.82rem",
+              textDecoration: "none",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "0.35rem",
+            }}
+          >
+            ← Return to Client Dashboard
+          </Link>
+        </div>
 
         <div className="portal-auth-footer">
           <Shield size={14} />

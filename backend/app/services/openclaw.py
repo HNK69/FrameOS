@@ -212,13 +212,20 @@ async def synthesize(*, run_id: int, attempt_count: int, client_name: str, proje
     except (TimeoutError, OSError) as exc:
         raise ServiceUnavailable(f"OpenClaw agent request failed: {type(exc).__name__}.") from exc
     if proc.returncode != 0:
-        detail = proc.stderr.decode("utf-8", errors="replace").strip()
-        if not detail:
+        detail = ""
+        for stream in (proc.stdout, proc.stderr):
             try:
-                envelope = json.loads(proc.stdout.decode("utf-8", errors="replace"))
-                detail = _extract_error(envelope)
-            except (json.JSONDecodeError, AttributeError):
-                detail = proc.stdout.decode("utf-8", errors="replace").strip()
+                envelope = json.loads(stream.decode("utf-8", errors="replace"))
+                extracted_err = _extract_error(envelope)
+                if extracted_err:
+                    detail = extracted_err
+                    break
+            except Exception:
+                pass
+        if not detail:
+            detail = proc.stderr.decode("utf-8", errors="replace").strip()
+        if not detail:
+            detail = proc.stdout.decode("utf-8", errors="replace").strip()
         detail = detail[-600:]
         raise ServiceUnavailable("OpenClaw agent failed" + (f": {detail}" if detail else "."))
     raw = proc.stdout.decode("utf-8", errors="replace").strip()

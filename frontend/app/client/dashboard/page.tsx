@@ -1,7 +1,27 @@
 "use client";
+
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import {
+  ArrowRight,
+  ExternalLink,
+  FileCheck,
+  FileText,
+  Film,
+  FolderKanban,
+  Inbox,
+  Plus,
+  Sparkles,
+  TrendingUp,
+  Tv,
+  Users,
+} from "lucide-react";
+import { AppLayout } from "@/components/shared/app-layout";
+import { PageHeader } from "@/components/shared/page-header";
+import { MetricCard } from "@/components/shared/metric-card";
+import { StatusPill } from "@/components/shared/status-pill";
+import { EmptyState } from "@/components/shared/empty-state";
 
 interface UserProfile {
   id: number;
@@ -21,16 +41,6 @@ interface ProjectRequest {
   project_id?: number;
 }
 
-const STATUS_COLORS: Record<string, string> = {
-  draft: "text-gray-400 bg-gray-800",
-  submitted: "text-blue-300 bg-blue-900/40",
-  under_review: "text-yellow-300 bg-yellow-900/40",
-  proposal_received: "text-purple-300 bg-purple-900/40",
-  accepted: "text-green-300 bg-green-900/40",
-  declined: "text-red-300 bg-red-900/40",
-  cancelled: "text-gray-500 bg-gray-800",
-};
-
 export default function ClientDashboardPage() {
   const router = useRouter();
   const [user, setUser] = useState<UserProfile | null>(null);
@@ -42,9 +52,15 @@ export default function ClientDashboardPage() {
     const init = async () => {
       try {
         const meR = await fetch("/api/me", { credentials: "include" });
-        if (!meR.ok) { router.push("/client/login"); return; }
+        if (!meR.ok) {
+          router.push("/client/login");
+          return;
+        }
         const me = await meR.json();
-        if (me.role !== "client") { router.push("/client/login"); return; }
+        if (me.role !== "client") {
+          router.push("/client/login");
+          return;
+        }
         setUser(me);
 
         const reqR = await fetch("/api/client/requests", { credentials: "include" });
@@ -58,117 +74,251 @@ export default function ClientDashboardPage() {
     init();
   }, [router]);
 
-  const handleLogout = async () => {
-    await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
-    router.push("/");
-  };
+  if (loading) {
+    return (
+      <AppLayout persona="client">
+        <div className="loading-line">Opening Client Workspace…</div>
+      </AppLayout>
+    );
+  }
 
-  if (loading) return (
-    <div className="min-h-screen bg-gray-950 flex items-center justify-center">
-      <div className="text-gray-400">Loading…</div>
+  const activeProjectsCount = requests.filter((r) => r.project_id).length;
+  const proposalsCount = requests.reduce((acc, r) => acc + (r.proposals_count || 0), 0);
+  const pendingRequestsCount = requests.filter((r) => r.status === "submitted" || r.status === "under_review").length;
+
+  const headerActions = (
+    <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+      <Link href="/client/agencies" className="quiet-button">
+        <Sparkles size={14} /> Browse Agencies
+      </Link>
+      <Link href="/client/requests/new" className="primary-button">
+        <Plus size={15} /> New Project Brief
+      </Link>
     </div>
   );
 
   return (
-    <div className="min-h-screen bg-gray-950 text-white">
-      {/* Header */}
-      <nav className="border-b border-gray-800 px-6 py-4 flex items-center justify-between">
-        <Link href="/" className="text-xl font-bold">
-          <span className="text-white">FRAME</span><span className="text-blue-400">OPS</span>
+    <AppLayout persona="client" currentUser={user}>
+      <PageHeader
+        eyebrow="CLIENT / OVERVIEW"
+        title={`Welcome back, ${user?.full_name || user?.email?.split("@")[0]}`}
+        description={
+          user?.company_name
+            ? `${user.company_name} · Track creative briefs, review proposals, and approve video cuts.`
+            : "Track your creative briefs, review agency proposals, and approve video deliverables."
+        }
+        actions={headerActions}
+      />
+
+      {error && (
+        <div className="notice" style={{ borderColor: "rgba(255,119,125,.4)", background: "rgba(134,44,51,.3)" }}>
+          <span>{error}</span>
+        </div>
+      )}
+
+      {/* 4 Metric Cards */}
+      <div className="kpi-row-4" style={{ marginBottom: "20px" }}>
+        <MetricCard
+          title="Active Briefs"
+          value={requests.length}
+          subtitle={`${pendingRequestsCount} awaiting proposal or review`}
+          icon={FileText}
+          variant="glow"
+        />
+        <MetricCard
+          title="Agency Proposals"
+          value={proposalsCount}
+          subtitle="Received across all briefs"
+          icon={Sparkles}
+        />
+        <MetricCard
+          title="Active Projects"
+          value={activeProjectsCount}
+          subtitle="In video editing production"
+          icon={FolderKanban}
+        />
+        <MetricCard
+          title="Review Portal"
+          value="Ready"
+          subtitle="Timecode feedback active"
+          icon={Film}
+        />
+      </div>
+
+      {/* Quick Action Panels */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))",
+          gap: "14px",
+          marginBottom: "20px",
+        }}
+      >
+        <Link
+          href="/client/agencies"
+          className="panel"
+          style={{
+            padding: "20px 22px",
+            display: "flex",
+            alignItems: "center",
+            gap: "16px",
+            transition: ".2s",
+            textDecoration: "none",
+          }}
+        >
+          <div
+            style={{
+              width: "42px",
+              height: "42px",
+              borderRadius: "12px",
+              background: "linear-gradient(145deg, #2c1a4b, #151424)",
+              border: "1px solid rgba(164,90,255,.3)",
+              display: "grid",
+              placeItems: "center",
+              color: "#d8b4fe",
+              flexShrink: 0,
+            }}
+          >
+            <Sparkles size={20} />
+          </div>
+          <div>
+            <h3 style={{ margin: "0 0 3px", font: "600 14px var(--display)", color: "#fff" }}>
+              Explore Agency Catalog
+            </h3>
+            <p style={{ margin: 0, fontSize: "11px", color: "#8a8ea1" }}>
+              Find specialized post-production studios with proven portfolios.
+            </p>
+          </div>
+          <ArrowRight size={16} color="var(--violet)" style={{ marginLeft: "auto" }} />
         </Link>
-        <div className="flex items-center gap-4">
-          <span className="text-sm text-gray-400">{user?.email}</span>
-          <button onClick={handleLogout} className="text-sm text-gray-500 hover:text-white transition-colors">
-            Sign out
-          </button>
-        </div>
-      </nav>
 
-      <div className="max-w-5xl mx-auto px-6 py-8">
-        {/* Welcome */}
-        <div className="mb-8">
-          <h1 className="text-2xl font-semibold">
-            Welcome back, {user?.full_name || user?.email}
-          </h1>
-          {user?.company_name && (
-            <p className="text-gray-400 text-sm mt-1">{user.company_name}</p>
-          )}
+        <Link
+          href="/portal"
+          className="panel"
+          style={{
+            padding: "20px 22px",
+            display: "flex",
+            alignItems: "center",
+            gap: "16px",
+            transition: ".2s",
+            textDecoration: "none",
+          }}
+        >
+          <div
+            style={{
+              width: "42px",
+              height: "42px",
+              borderRadius: "12px",
+              background: "linear-gradient(145deg, #1f274a, #121626)",
+              border: "1px solid rgba(99,102,241,.3)",
+              display: "grid",
+              placeItems: "center",
+              color: "#93c5fd",
+              flexShrink: 0,
+            }}
+          >
+            <Film size={20} />
+          </div>
+          <div>
+            <h3 style={{ margin: "0 0 3px", font: "600 14px var(--display)", color: "#fff" }}>
+              Video Review Portal
+            </h3>
+            <p style={{ margin: 0, fontSize: "11px", color: "#8a8ea1" }}>
+              Leave timestamped notes, audio memos, and approve final deliverables.
+            </p>
+          </div>
+          <ArrowRight size={16} color="var(--violet)" style={{ marginLeft: "auto" }} />
+        </Link>
+      </div>
+
+      {/* Project Requests Section */}
+      <section className="panel" style={{ padding: "20px 22px" }}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            marginBottom: "16px",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <span className="head-icon">
+              <FileText size={15} />
+            </span>
+            <h2 style={{ margin: 0, font: "600 15px var(--display)", color: "#fff" }}>
+              Your Project Briefs
+            </h2>
+          </div>
+          <Link href="/client/requests/new" className="outline-action" style={{ textDecoration: "none" }}>
+            <Plus size={13} /> Submit Brief
+          </Link>
         </div>
 
-        {error && (
-          <div className="mb-6 bg-red-900/30 border border-red-700/50 rounded-lg p-3 text-red-300 text-sm">
-            {error}
+        {requests.length === 0 ? (
+          <EmptyState
+            icon={Inbox}
+            title="No project briefs submitted yet"
+            body="Discover an agency from our catalog or submit your first creative brief to receive custom proposals."
+            action={
+              <Link className="small-action" href="/client/agencies">
+                Browse Agency Catalog <ArrowRight size={13} />
+              </Link>
+            }
+          />
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+            {requests.map((req) => (
+              <Link
+                key={req.id}
+                href={`/client/requests/${req.id}`}
+                className="panel"
+                style={{
+                  padding: "16px 18px",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  background: "rgba(255,255,255,.02)",
+                  textDecoration: "none",
+                  transition: ".2s",
+                }}
+              >
+                <div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "4px" }}>
+                    <b style={{ color: "#fff", fontSize: "13px" }}>{req.title}</b>
+                    <StatusPill status={req.status} />
+                  </div>
+                  <div style={{ fontSize: "11px", color: "#878b9f", display: "flex", gap: "12px", alignItems: "center" }}>
+                    <span>Agency: <b style={{ color: "#cbd5e1" }}>{req.agency_name}</b></span>
+                    <span>·</span>
+                    <span>{req.proposals_count} {req.proposals_count === 1 ? "Proposal" : "Proposals"}</span>
+                    <span>·</span>
+                    <span>{new Date(req.created_at).toLocaleDateString()}</span>
+                  </div>
+                </div>
+
+                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                  {req.project_id && (
+                    <span
+                      style={{
+                        padding: "3px 8px",
+                        borderRadius: "6px",
+                        fontSize: "9px",
+                        fontFamily: "var(--mono)",
+                        background: "rgba(75,214,160,.12)",
+                        border: "1px solid rgba(75,214,160,.35)",
+                        color: "#5be3aa",
+                      }}
+                    >
+                      Active Project #{req.project_id}
+                    </span>
+                  )}
+                  <ArrowRight size={15} color="var(--violet)" />
+                </div>
+              </Link>
+            ))}
           </div>
         )}
-
-        {/* Quick actions */}
-        <div className="grid sm:grid-cols-2 gap-4 mb-8">
-          <Link
-            href="/client/agencies"
-            className="bg-gray-900 border border-gray-800 hover:border-blue-700/60 rounded-xl p-5 transition-colors group"
-          >
-            <div className="text-2xl mb-2">🔍</div>
-            <div className="font-medium">Browse Agencies</div>
-            <div className="text-gray-400 text-sm mt-1">Discover and compare video production agencies</div>
-          </Link>
-          <Link
-            href="/client/requests/new"
-            className="bg-blue-900/20 border border-blue-700/40 hover:border-blue-500 rounded-xl p-5 transition-colors group"
-          >
-            <div className="text-2xl mb-2">📋</div>
-            <div className="font-medium text-blue-300">New Project Brief</div>
-            <div className="text-gray-400 text-sm mt-1">Submit a project request to an agency</div>
-          </Link>
-        </div>
-
-        {/* Project Requests */}
-        <div>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold">Your Project Requests</h2>
-            <Link href="/client/requests/new" className="text-sm text-blue-400 hover:text-blue-300">
-              + New Request
-            </Link>
-          </div>
-
-          {requests.length === 0 ? (
-            <div className="bg-gray-900 border border-gray-800 rounded-xl p-10 text-center text-gray-500">
-              <div className="text-4xl mb-3">📭</div>
-              <div className="font-medium mb-1">No project requests yet</div>
-              <div className="text-sm">
-                <Link href="/client/agencies" className="text-blue-400 hover:text-blue-300">
-                  Browse agencies
-                </Link>{" "}
-                to submit your first project brief.
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {requests.map((req) => (
-                <Link
-                  key={req.id}
-                  href={`/client/requests/${req.id}`}
-                  className="block bg-gray-900 border border-gray-800 hover:border-gray-700 rounded-xl p-5 transition-colors"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <div className="font-medium">{req.title}</div>
-                      <div className="text-gray-400 text-sm mt-0.5">{req.agency_name}</div>
-                    </div>
-                    <span className={`text-xs px-2 py-1 rounded-full font-medium whitespace-nowrap ${STATUS_COLORS[req.status] || "text-gray-400 bg-gray-800"}`}>
-                      {req.status.replace(/_/g, " ")}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-4 mt-3 text-xs text-gray-500">
-                    <span>{req.proposals_count} proposal{req.proposals_count !== 1 ? "s" : ""}</span>
-                    <span>{new Date(req.created_at).toLocaleDateString()}</span>
-                    {req.project_id && <span className="text-green-400">✓ Project created</span>}
-                  </div>
-                </Link>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
+      </section>
+    </AppLayout>
   );
 }

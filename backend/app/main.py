@@ -43,7 +43,7 @@ from .schemas import (
     ProjectInput,
     RetainInput,
 )
-from .security import current_identity
+from .security import current_identity, validate_upload_security
 from .services import groq, hindsight, openclaw
 from .services.production_analytics import get_production_analytics
 
@@ -76,6 +76,19 @@ async def add_security_headers(request, call_next):
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "SAMEORIGIN"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(self), geolocation=()"
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data: blob: https:; "
+        "font-src 'self' data:; "
+        "media-src 'self' blob: data:; "
+        "connect-src 'self' ws: wss: http: https:; "
+        "frame-ancestors 'self';"
+    )
+    if request.url.scheme == "https" or settings.auth_cookie_secure:
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     return response
 
 
@@ -297,16 +310,8 @@ async def upload_asset(project_id: int, file: UploadFile = File(...), category: 
     user, wid, _ = identity
     project = _get_project(db, project_id, wid)
     client = _get_client(db, project.client_id, wid)
-    safe_name = Path(file.filename or "upload.bin").name[:255]
     content = await file.read(settings.max_upload_bytes + 1)
-    if not content or len(content) > settings.max_upload_bytes:
-        raise HTTPException(413, "File is empty or exceeds the upload size limit")
-    content_type = file.content_type or mimetypes.guess_type(safe_name)[0] or "application/octet-stream"
-    allowed = {"image/png", "image/jpeg", "image/webp", "image/svg+xml", "font/woff", "font/woff2",
-               "audio/mpeg", "audio/wav", "video/mp4", "video/quicktime", "application/pdf",
-               "text/plain", "text/markdown", "application/json", "application/octet-stream"}
-    if content_type not in allowed:
-        raise HTTPException(415, "Unsupported asset content type")
+    safe_name, content_type = validate_upload_security(file.filename or "upload.bin", content)
     folder = Path(settings.upload_dir).resolve() / str(wid) / str(project.id)
     folder.mkdir(parents=True, exist_ok=True)
     storage_key = f"{wid}/{project.id}/{uuid4().hex}"

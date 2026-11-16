@@ -1,6 +1,23 @@
 "use client";
+
 import Link from "next/link";
 import { useState, useEffect } from "react";
+import {
+  ArrowRight,
+  BrainCircuit,
+  CheckCircle2,
+  FileCheck,
+  Film,
+  Layers,
+  ShieldCheck,
+  Sparkles,
+  Tv,
+  Users,
+  Video,
+  Wand2,
+} from "lucide-react";
+import { FrameOpsLogo } from "@/components/shared/frameops-logo";
+import { TopBar } from "@/components/shared/topbar";
 
 export default function LandingPage() {
   const [authStatus, setAuthStatus] = useState<{ setup_required: boolean } | null>(null);
@@ -13,133 +30,299 @@ export default function LandingPage() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-gray-950 text-white flex flex-col">
-      {/* Nav */}
-      <nav className="border-b border-gray-800 px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span className="text-2xl font-bold tracking-tight text-white">FRAME</span>
-          <span className="text-2xl font-bold tracking-tight text-blue-400">OPS</span>
-        </div>
-        <div className="flex gap-3">
-          <Link
-            href="/client/login"
-            className="px-4 py-2 text-sm text-gray-300 hover:text-white transition-colors"
-          >
-            Client Login
-          </Link>
-          <Link
-            href="/agency/login"
-            className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-500 rounded-lg transition-colors font-medium"
-          >
-            Agency Login
-          </Link>
-        </div>
-      </nav>
+    <div className="app-frame" style={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}>
+      {/* Topbar */}
+      <TopBar
+        persona="public"
+        navItems={[
+          { href: "/client/agencies", label: "Agency Catalog", icon: Sparkles },
+          { href: "/portal", label: "Review Portal", icon: Film },
+        ]}
+      />
 
-      {/* Hero */}
-      <main className="flex-1 flex flex-col items-center justify-center px-6 py-20 text-center">
-        <div className="max-w-4xl mx-auto">
-          <div className="inline-flex items-center gap-2 bg-blue-900/40 border border-blue-700/50 rounded-full px-4 py-1.5 text-blue-300 text-sm mb-8">
-            <span className="w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
+      {/* Main Hero */}
+      <main
+        style={{
+          flex: 1,
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: "50px 20px 40px",
+          textAlign: "center",
+        }}
+      >
+        <div style={{ maxWidth: "860px", margin: "0 auto" }}>
+          <div
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "8px",
+              padding: "6px 16px",
+              borderRadius: "99px",
+              background: "rgba(164,90,255,.08)",
+              border: "1px solid rgba(164,90,255,.3)",
+              color: "#d8b4fe",
+              fontSize: "11px",
+              fontFamily: "var(--mono)",
+              letterSpacing: "0.06em",
+              marginBottom: "24px",
+            }}
+          >
+            <span className="pip-dot status-ready" style={{ boxShadow: "0 0 10px #4bd6a0" }} />
             Remember Every Client. Perfect Every Project.
           </div>
 
-          <h1 className="text-5xl sm:text-6xl font-bold mb-6 leading-tight">
-            The operating system for{" "}
-            <span className="text-blue-400">video production</span>
+          <h1
+            style={{
+              font: "600 clamp(32px, 4.5vw, 56px) var(--display)",
+              letterSpacing: "-0.04em",
+              lineHeight: 1.12,
+              margin: "0 0 20px",
+              color: "#fff",
+            }}
+          >
+            The Operating System for{" "}
+            <span
+              style={{
+                background: "linear-gradient(135deg, #c084fc, #9333ea 50%, #6366f1)",
+                WebkitBackgroundClip: "text",
+                WebkitTextFillColor: "transparent",
+              }}
+            >
+              Video Production
+            </span>
           </h1>
 
-          <p className="text-gray-400 text-xl mb-12 max-w-2xl mx-auto">
-            Connect clients with video-editing agencies. Submit project briefs, track
-            production, review deliverables — with AI-powered memory that makes every
-            project better than the last.
+          <p
+            style={{
+              fontSize: "clamp(13px, 1.2vw, 16px)",
+              color: "#9ca0b5",
+              maxWidth: "680px",
+              margin: "0 auto 40px",
+              lineHeight: 1.6,
+            }}
+          >
+            Connect clients with premier video-editing agencies. Submit structured briefs,
+            review frame-accurate video cuts, and translate feedback directly into DaVinci Resolve
+            workflows—powered by adaptive client memory.
           </p>
 
-          {/* Two entry points */}
-          <div className="grid sm:grid-cols-2 gap-6 max-w-2xl mx-auto">
-            {/* Client card */}
-            <div className="bg-gray-900 border border-gray-800 rounded-2xl p-8 text-left hover:border-blue-700/60 transition-colors group">
-              <div className="w-12 h-12 rounded-xl bg-blue-900/50 flex items-center justify-center mb-4 text-2xl">
-                🎬
+          {/* Persona Entry Grid */}
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(290px, 1fr))",
+              gap: "20px",
+              maxWidth: "780px",
+              margin: "0 auto",
+              textAlign: "left",
+            }}
+          >
+            {/* Client Card */}
+            <div
+              className="panel"
+              style={{
+                padding: "28px",
+                display: "flex",
+                flexDirection: "column",
+                position: "relative",
+                overflow: "hidden",
+              }}
+            >
+              <div
+                style={{
+                  width: "44px",
+                  height: "44px",
+                  borderRadius: "12px",
+                  background: "linear-gradient(145deg, #2a1645, #141221)",
+                  border: "1px solid rgba(164,90,255,.3)",
+                  display: "grid",
+                  placeItems: "center",
+                  color: "#d8b4fe",
+                  marginBottom: "16px",
+                }}
+              >
+                <Film size={22} />
               </div>
-              <h2 className="text-xl font-semibold mb-2">I&apos;m a Client</h2>
-              <p className="text-gray-400 text-sm mb-6">
-                Discover agencies, submit project briefs, track production and
-                review deliverables — all in one place.
+
+              <h2 style={{ margin: "0 0 6px", font: "600 20px var(--display)", color: "#fff" }}>
+                I&apos;m a Client
+              </h2>
+
+              <p style={{ margin: "0 0 22px", fontSize: "12px", color: "#9295a8", lineHeight: 1.55, flex: 1 }}>
+                Discover verified agencies, submit creative briefs, track production timelines,
+                and review video deliverables with timecode comments.
               </p>
-              <div className="flex flex-col gap-2">
+
+              <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
                 <Link
                   href="/client/register"
-                  className="w-full text-center py-2.5 bg-blue-600 hover:bg-blue-500 rounded-lg text-sm font-medium transition-colors"
+                  className="primary-button"
+                  style={{ height: "40px", width: "100%", justifyContent: "center" }}
                 >
-                  Get Started Free
+                  Get Started Free <ArrowRight size={14} />
                 </Link>
                 <Link
                   href="/client/login"
-                  className="w-full text-center py-2.5 text-gray-400 hover:text-white text-sm transition-colors"
+                  className="quiet-button"
+                  style={{ height: "38px", width: "100%", justifyContent: "center" }}
                 >
-                  Sign In
+                  Client Sign In
                 </Link>
               </div>
             </div>
 
-            {/* Agency card */}
-            <div className="bg-gray-900 border border-gray-800 rounded-2xl p-8 text-left hover:border-purple-700/60 transition-colors group">
-              <div className="w-12 h-12 rounded-xl bg-purple-900/50 flex items-center justify-center mb-4 text-2xl">
-                ✂️
+            {/* Agency Card */}
+            <div
+              className="panel"
+              style={{
+                padding: "28px",
+                display: "flex",
+                flexDirection: "column",
+                position: "relative",
+                overflow: "hidden",
+                border: "1px solid rgba(164,90,255,.3)",
+                background: "linear-gradient(150deg, rgba(28,21,46,.95), rgba(14,15,26,.98))",
+              }}
+            >
+              <div
+                style={{
+                  width: "44px",
+                  height: "44px",
+                  borderRadius: "12px",
+                  background: "linear-gradient(145deg, #431f78, #181328)",
+                  border: "1px solid rgba(164,90,255,.5)",
+                  display: "grid",
+                  placeItems: "center",
+                  color: "#fff",
+                  boxShadow: "0 0 20px rgba(164,90,255,.35)",
+                  marginBottom: "16px",
+                }}
+              >
+                <Sparkles size={22} />
               </div>
-              <h2 className="text-xl font-semibold mb-2">I&apos;m an Agency</h2>
-              <p className="text-gray-400 text-sm mb-6">
-                Build your profile, receive project requests, manage production
-                workflows and deliver with AI-powered client memory.
+
+              <h2 style={{ margin: "0 0 6px", font: "600 20px var(--display)", color: "#fff" }}>
+                I&apos;m an Agency
+              </h2>
+
+              <p style={{ margin: "0 0 22px", fontSize: "12px", color: "#9295a8", lineHeight: 1.55, flex: 1 }}>
+                Publish your studio profile, receive qualified client briefs, manage production
+                milestones, and execute edits with AI-backed client intelligence.
               </p>
-              <div className="flex flex-col gap-2">
+
+              <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
                 <Link
                   href="/agency/register"
-                  className="w-full text-center py-2.5 bg-purple-600 hover:bg-purple-500 rounded-lg text-sm font-medium transition-colors"
+                  className="primary-button"
+                  style={{
+                    height: "40px",
+                    width: "100%",
+                    justifyContent: "center",
+                    boxShadow: "0 8px 25px rgba(164,90,255,.4)",
+                  }}
                 >
-                  List Your Agency
+                  Register Agency Workspace <ArrowRight size={14} />
                 </Link>
                 <Link
                   href="/agency/login"
-                  className="w-full text-center py-2.5 text-gray-400 hover:text-white text-sm transition-colors"
+                  className="quiet-button"
+                  style={{ height: "38px", width: "100%", justifyContent: "center" }}
                 >
-                  Sign In
+                  Agency Studio Login
                 </Link>
               </div>
             </div>
           </div>
 
           {authStatus?.setup_required && (
-            <div className="mt-8 p-4 bg-amber-900/30 border border-amber-700/50 rounded-lg text-amber-300 text-sm max-w-md mx-auto">
-              First-time setup required.{" "}
-              <Link href="/setup" className="underline font-medium hover:text-amber-200">
-                Create the workspace owner account →
+            <div
+              className="panel"
+              style={{
+                marginTop: "28px",
+                padding: "14px 20px",
+                borderColor: "rgba(237,186,98,.35)",
+                background: "rgba(237,186,98,.08)",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "10px",
+                color: "#f0ce84",
+                fontSize: "11px",
+              }}
+            >
+              <span>First-time setup required:</span>
+              <Link href="/agency/register" style={{ color: "#fff", textDecoration: "underline", fontWeight: 600 }}>
+                Create the first workspace owner account →
               </Link>
             </div>
           )}
         </div>
       </main>
 
-      {/* Features strip */}
-      <section className="border-t border-gray-800 py-12 px-6">
-        <div className="max-w-4xl mx-auto grid grid-cols-2 sm:grid-cols-4 gap-8 text-center">
+      {/* Feature Strip */}
+      <section
+        style={{
+          borderTop: "1px solid var(--line)",
+          padding: "36px 20px",
+          marginTop: "auto",
+        }}
+      >
+        <div
+          style={{
+            maxWidth: "1100px",
+            margin: "0 auto",
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+            gap: "20px",
+          }}
+        >
           {[
-            { icon: "🤖", label: "AI Feedback Extraction" },
-            { icon: "🧠", label: "Adaptive Client Memory" },
-            { icon: "📋", label: "Structured Briefs" },
-            { icon: "🎯", label: "Task Synthesis" },
-          ].map(({ icon, label }) => (
-            <div key={label} className="flex flex-col items-center gap-2">
-              <span className="text-3xl">{icon}</span>
-              <span className="text-gray-400 text-sm">{label}</span>
+            {
+              icon: Wand2,
+              title: "AI Feedback Extraction",
+              desc: "Synthesize unstructured client feedback into structured Resolve cut instructions.",
+            },
+            {
+              icon: BrainCircuit,
+              title: "Isolated Client Memory",
+              desc: "Hindsight memory banks preserve creative preferences across projects with zero leakage.",
+            },
+            {
+              icon: Film,
+              title: "Frame-Accurate Review",
+              desc: "Collaborative timecode comments and version approval pipeline.",
+            },
+            {
+              icon: ShieldCheck,
+              title: "Enterprise Studio RBAC",
+              desc: "Strict multi-tenant workspace isolation for agency rosters and clients.",
+            },
+          ].map(({ icon: Icon, title, desc }) => (
+            <div
+              key={title}
+              className="panel"
+              style={{
+                padding: "18px",
+                background: "rgba(255,255,255,.02)",
+                display: "flex",
+                flexDirection: "column",
+                gap: "8px",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "var(--violet)" }}>
+                <Icon size={16} />
+                <span style={{ font: "600 12px var(--display)", color: "#fff" }}>{title}</span>
+              </div>
+              <p style={{ margin: 0, fontSize: "11px", color: "#85899e", lineHeight: 1.5 }}>{desc}</p>
             </div>
           ))}
         </div>
       </section>
 
-      <footer className="border-t border-gray-800 py-6 text-center text-gray-600 text-sm">
-        © {new Date().getFullYear()} FRAMEOPS — Video Production Operations Platform
+      <footer className="app-footer">
+        <span>FRAMEOPS <i>·</i> Remember Every Client. Perfect Every Project.</span>
+        <span>Enterprise Video Production Platform</span>
       </footer>
     </div>
   );

@@ -1,7 +1,26 @@
 "use client";
+
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import {
+  AlertCircle,
+  ArrowRight,
+  Check,
+  CheckCircle2,
+  ExternalLink,
+  Globe,
+  Mail,
+  Phone,
+  Plus,
+  Save,
+  Sparkles,
+  Trash2,
+  Video,
+  X,
+} from "lucide-react";
+import { AppLayout } from "@/components/shared/app-layout";
+import { PageHeader } from "@/components/shared/page-header";
 
 interface AgencyProfile {
   id: number;
@@ -36,7 +55,9 @@ export default function AgencyProfilePage() {
   const [portfolioTitle, setPortfolioTitle] = useState("");
   const [portfolioUrl, setPortfolioUrl] = useState("");
   const [portfolioDesc, setPortfolioDesc] = useState("");
-  const [portfolio, setPortfolio] = useState<{ title: string; video_url: string; description: string }[]>([]);
+  const [portfolio, setPortfolio] = useState<
+    { title: string; video_url: string; description: string }[]
+  >([]);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -99,10 +120,13 @@ export default function AgencyProfilePage() {
         setMessage({ type: "success", text: "Profile updated successfully." });
       } else {
         const err = await res.json();
-        setMessage({ type: "error", text: typeof err.detail === "string" ? err.detail : "Save failed" });
+        setMessage({
+          type: "error",
+          text: typeof err.detail === "string" ? err.detail : "Failed to update profile.",
+        });
       }
     } catch {
-      setMessage({ type: "error", text: "Network error while saving." });
+      setMessage({ type: "error", text: "Network error saving profile." });
     } finally {
       setSaving(false);
     }
@@ -112,24 +136,30 @@ export default function AgencyProfilePage() {
     if (!profile) return;
     setPublishing(true);
     setMessage(null);
+    const action = profile.is_published ? "unpublish" : "publish";
     try {
-      const endpoint = profile.is_published
-        ? "/api/agency/profile/unpublish"
-        : "/api/agency/profile/publish";
-      const res = await fetch(endpoint, { method: "POST", credentials: "include" });
-      const data = await res.json();
+      const res = await fetch(`/api/agency/profile/${action}`, {
+        method: "POST",
+        credentials: "include",
+      });
       if (res.ok) {
+        const updated = await res.json();
+        setProfile(updated);
         setMessage({
           type: "success",
-          text: profile.is_published ? "Profile unpublished." : "Profile published to Discovery catalog!",
+          text: profile.is_published
+            ? "Agency profile unpublished from public discovery."
+            : "Agency profile published! Clients can now discover your agency.",
         });
-        await fetchProfile();
       } else {
-        const missing = data.detail?.missing_fields?.join(", ") || data.detail?.message || "Publishing check failed";
-        setMessage({ type: "error", text: `Cannot publish: ${missing}` });
+        const err = await res.json();
+        setMessage({
+          type: "error",
+          text: typeof err.detail === "string" ? err.detail : `Failed to ${action} profile.`,
+        });
       }
     } catch {
-      setMessage({ type: "error", text: "Failed to toggle publish status." });
+      setMessage({ type: "error", text: "Network error updating publish state." });
     } finally {
       setPublishing(false);
     }
@@ -159,7 +189,14 @@ export default function AgencyProfilePage() {
 
   const addPortfolioItem = () => {
     if (portfolioTitle.trim() && portfolioUrl.trim()) {
-      setPortfolio([...portfolio, { title: portfolioTitle.trim(), video_url: portfolioUrl.trim(), description: portfolioDesc.trim() }]);
+      setPortfolio([
+        ...portfolio,
+        {
+          title: portfolioTitle.trim(),
+          video_url: portfolioUrl.trim(),
+          description: portfolioDesc.trim(),
+        },
+      ]);
       setPortfolioTitle("");
       setPortfolioUrl("");
       setPortfolioDesc("");
@@ -172,181 +209,181 @@ export default function AgencyProfilePage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-950 flex items-center justify-center text-gray-400">
-        Loading agency profile…
-      </div>
+      <AppLayout persona="agency">
+        <div className="loading-line">Opening Agency Profile…</div>
+      </AppLayout>
     );
   }
 
+  const publishHeaderActions = (
+    <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+      <span className={`status-pill ${profile?.is_published ? "accepted" : "under_review"}`}>
+        <span className={`status-dot ${profile?.is_published ? "active" : "pending"}`} />
+        {profile?.is_published ? "Published in Catalog" : "Draft (Unpublished)"}
+      </span>
+      <button
+        type="button"
+        onClick={togglePublish}
+        disabled={publishing}
+        className={profile?.is_published ? "quiet-button" : "primary-button"}
+      >
+        {publishing
+          ? "Updating…"
+          : profile?.is_published
+          ? "Unpublish Profile"
+          : "Publish to Catalog"}
+      </button>
+    </div>
+  );
+
   return (
-    <div className="min-h-screen bg-gray-950 text-white">
-      {/* Top Navbar */}
-      <nav className="border-b border-gray-800 px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Link href="/" className="text-xl font-bold">
-            <span className="text-white">FRAME</span>
-            <span className="text-purple-400">OPS</span>
-          </Link>
-          <span className="text-xs bg-purple-900/50 text-purple-300 border border-purple-700/50 px-2 py-0.5 rounded">
-            Agency Studio
-          </span>
+    <AppLayout persona="agency">
+      <PageHeader
+        eyebrow="WORKSPACE / PROFILE"
+        title={`${profile?.workspace_name || "Agency"} Profile`}
+        description="Configure your public catalog listing and credentials for discovery by potential clients."
+        actions={publishHeaderActions}
+      />
+
+      {message && (
+        <div
+          className="notice"
+          style={
+            message.type === "error"
+              ? { borderColor: "rgba(255,119,125,.4)", background: "rgba(134,44,51,.3)" }
+              : undefined
+          }
+        >
+          <span>{message.text}</span>
+          <button onClick={() => setMessage(null)} aria-label="Dismiss">
+            <X size={14} />
+          </button>
         </div>
-        <div className="flex items-center gap-3">
-          <Link href="/agency/dashboard" className="text-sm text-gray-400 hover:text-white">
-            Dashboard
-          </Link>
-          <Link href="/agency/requests" className="text-sm text-gray-400 hover:text-white">
-            Incoming Requests
-          </Link>
-          <Link href="/clients" className="text-sm text-gray-400 hover:text-white">
-            Clients & Projects
-          </Link>
-        </div>
-      </nav>
+      )}
 
-      <div className="max-w-4xl mx-auto px-6 py-8">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
-          <div>
-            <h1 className="text-2xl font-bold">{profile?.workspace_name || "Agency"} Profile</h1>
-            <p className="text-gray-400 text-sm mt-1">
-              Configure your public catalog listing and credentials for discovery by potential clients.
-            </p>
+      {profile && !profile.is_published && (profile.missing_fields?.length ?? 0) > 0 && (
+        <div
+          className="panel"
+          style={{
+            padding: "16px 20px",
+            marginBottom: "20px",
+            borderColor: "rgba(237,186,98,.35)",
+            background: "linear-gradient(145deg,rgba(40,30,15,.7),rgba(20,18,25,.8))",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "#f0ce84", marginBottom: "8px", fontSize: "11px", fontWeight: 600 }}>
+            <AlertCircle size={15} />
+            <span>Publishing Checklist</span>
           </div>
-
-          <div className="flex items-center gap-3">
-            <span
-              className={`text-xs px-3 py-1.5 rounded-full font-medium ${
-                profile?.is_published
-                  ? "bg-green-900/40 text-green-300 border border-green-700/50"
-                  : "bg-yellow-900/40 text-yellow-300 border border-yellow-700/50"
-              }`}
-            >
-              {profile?.is_published ? "● Published in Catalog" : "○ Draft (Unpublished)"}
-            </span>
-            <button
-              onClick={togglePublish}
-              disabled={publishing}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                profile?.is_published
-                  ? "bg-gray-800 hover:bg-gray-700 text-gray-300"
-                  : "bg-purple-600 hover:bg-purple-500 text-white"
-              }`}
-            >
-              {publishing
-                ? "Updating…"
-                : profile?.is_published
-                ? "Unpublish Profile"
-                : "Publish to Catalog"}
-            </button>
+          <p style={{ margin: 0, color: "#cbd5e1", fontSize: "11px" }}>
+            Complete the following required fields to make your profile visible to clients in discovery:
+          </p>
+          <div className="chip-container" style={{ marginTop: "10px" }}>
+            {profile.missing_fields.map((f) => (
+              <span
+                key={f}
+                style={{
+                  padding: "4px 10px",
+                  borderRadius: "6px",
+                  fontSize: "10px",
+                  fontFamily: "var(--mono)",
+                  background: "rgba(237,186,98,.12)",
+                  border: "1px solid rgba(237,186,98,.35)",
+                  color: "#f0ce84",
+                  textTransform: "capitalize",
+                }}
+              >
+                {f.replace("_", " ")}
+              </span>
+            ))}
           </div>
         </div>
+      )}
 
-        {message && (
-          <div
-            className={`mb-6 p-4 rounded-lg text-sm border ${
-              message.type === "success"
-                ? "bg-green-950/40 border-green-800 text-green-300"
-                : "bg-red-950/40 border-red-800 text-red-300"
-            }`}
-          >
-            {message.text}
+      <form onSubmit={handleSave} style={{ display: "flex", flexDirection: "column", gap: "18px" }}>
+        {/* General Information */}
+        <section className="form-panel">
+          <div className="form-section-title">
+            <Sparkles size={16} color="var(--violet)" />
+            <h3>General Agency Information</h3>
+            <small>Public Brand Presentation</small>
           </div>
-        )}
 
-        {profile && !profile.is_published && profile.missing_fields?.length > 0 && (
-          <div className="mb-6 p-4 bg-yellow-950/30 border border-yellow-800/60 rounded-xl text-sm text-yellow-300">
-            <span className="font-semibold">Publishing Checklist:</span> Complete the following required fields to publish:
-            <ul className="list-disc list-inside mt-2 text-yellow-200">
-              {profile.missing_fields.map((f) => (
-                <li key={f}>{f.replace("_", " ")}</li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        <form onSubmit={handleSave} className="space-y-6">
-          {/* General Information */}
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 space-y-4">
-            <h2 className="text-lg font-semibold">General Information</h2>
-
-            <div>
-              <label className="block text-gray-300 text-sm font-medium mb-1">Tagline</label>
+          <div className="stack-form">
+            <label>
+              Tagline
               <input
                 type="text"
                 value={tagline}
                 onChange={(e) => setTagline(e.target.value)}
                 placeholder="e.g. Cinematic commercial editing & fast turnaround reels"
-                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-purple-500"
               />
-            </div>
+            </label>
 
-            <div>
-              <label className="block text-gray-300 text-sm font-medium mb-1">
-                Description <span className="text-purple-400">*</span>
-              </label>
+            <label>
+              Description <span style={{ color: "var(--violet)" }}>*</span>
               <textarea
                 rows={4}
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="Describe your agency, creative team, editing style, and production capabilities…"
-                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-purple-500"
               />
-            </div>
+            </label>
 
-            <div className="grid sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-gray-300 text-sm font-medium mb-1">
-                  Public Contact Email <span className="text-purple-400">*</span>
-                </label>
+            <div className="form-grid">
+              <label>
+                Public Contact Email <span style={{ color: "var(--violet)" }}>*</span>
                 <input
                   type="email"
                   value={contactEmail}
                   onChange={(e) => setContactEmail(e.target.value)}
                   placeholder="contact@agency.com"
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-purple-500"
                 />
-              </div>
+              </label>
 
-              <div>
-                <label className="block text-gray-300 text-sm font-medium mb-1">Contact Phone</label>
+              <label>
+                Contact Phone
                 <input
                   type="text"
                   value={contactPhone}
                   onChange={(e) => setContactPhone(e.target.value)}
                   placeholder="+1 (555) 000-0000"
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-purple-500"
                 />
-              </div>
+              </label>
             </div>
 
-            <div>
-              <label className="block text-gray-300 text-sm font-medium mb-1">Website URL</label>
+            <label>
+              Website URL
               <input
                 type="url"
                 value={website}
                 onChange={(e) => setWebsite(e.target.value)}
                 placeholder="https://agency.com"
-                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-purple-500"
               />
-            </div>
+            </label>
+          </div>
+        </section>
+
+        {/* Specializations & Services */}
+        <section className="form-panel">
+          <div className="form-section-title">
+            <Video size={16} color="var(--violet)" />
+            <h3>Specializations & Services</h3>
+            <small>Client Matching Capabilities</small>
           </div>
 
-          {/* Specializations & Services */}
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 space-y-6">
-            <h2 className="text-lg font-semibold">Specializations & Services</h2>
-
-            {/* Specializations */}
+          <div className="stack-form">
             <div>
-              <label className="block text-gray-300 text-sm font-medium mb-1">
-                Specializations <span className="text-purple-400">*</span>
+              <label style={{ display: "block", marginBottom: "8px" }}>
+                Specializations <span style={{ color: "var(--violet)" }}>*</span>
               </label>
-              <div className="flex gap-2 mb-2">
+              <div style={{ display: "flex", gap: "8px", marginBottom: "10px" }}>
                 <input
                   type="text"
                   value={specInput}
                   onChange={(e) => setSpecInput(e.target.value)}
                   placeholder="e.g. YouTube Creators, Commercials, Motion Graphics"
-                  className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-purple-500"
+                  style={{ flex: 1 }}
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
                       e.preventDefault();
@@ -357,42 +394,36 @@ export default function AgencyProfilePage() {
                 <button
                   type="button"
                   onClick={addSpec}
-                  className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-white rounded-lg text-sm font-medium"
+                  className="quiet-button"
+                  style={{ height: "34px" }}
                 >
-                  Add
+                  <Plus size={14} /> Add
                 </button>
               </div>
-              <div className="flex flex-wrap gap-2">
+
+              <div className="chip-container">
                 {specializations.map((s, idx) => (
-                  <span
-                    key={idx}
-                    className="inline-flex items-center gap-1.5 px-3 py-1 bg-purple-950/60 border border-purple-800/60 rounded-full text-xs text-purple-300"
-                  >
+                  <span key={idx} className="chip-badge">
                     {s}
-                    <button
-                      type="button"
-                      onClick={() => removeSpec(idx)}
-                      className="text-purple-400 hover:text-white"
-                    >
-                      ×
+                    <button type="button" onClick={() => removeSpec(idx)} aria-label={`Remove ${s}`}>
+                      <X size={12} />
                     </button>
                   </span>
                 ))}
               </div>
             </div>
 
-            {/* Services */}
-            <div>
-              <label className="block text-gray-300 text-sm font-medium mb-1">
-                Offered Services <span className="text-purple-400">*</span>
+            <div style={{ marginTop: "14px" }}>
+              <label style={{ display: "block", marginBottom: "8px" }}>
+                Offered Services <span style={{ color: "var(--violet)" }}>*</span>
               </label>
-              <div className="flex gap-2 mb-2">
+              <div style={{ display: "flex", gap: "8px", marginBottom: "10px" }}>
                 <input
                   type="text"
                   value={srvInput}
                   onChange={(e) => setSrvInput(e.target.value)}
                   placeholder="e.g. Color Grading, Sound Design, Subtitles, 4K Upscaling"
-                  className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-purple-500"
+                  style={{ flex: 1 }}
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
                       e.preventDefault();
@@ -403,110 +434,132 @@ export default function AgencyProfilePage() {
                 <button
                   type="button"
                   onClick={addSrv}
-                  className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-white rounded-lg text-sm font-medium"
+                  className="quiet-button"
+                  style={{ height: "34px" }}
                 >
-                  Add
+                  <Plus size={14} /> Add
                 </button>
               </div>
-              <div className="flex flex-wrap gap-2">
+
+              <div className="chip-container">
                 {services.map((s, idx) => (
-                  <span
-                    key={idx}
-                    className="inline-flex items-center gap-1.5 px-3 py-1 bg-gray-800 border border-gray-700 rounded-full text-xs text-gray-300"
-                  >
+                  <span key={idx} className="chip-badge" style={{ background: "rgba(255,255,255,.05)", borderColor: "rgba(255,255,255,.12)", color: "#e2e8f0" }}>
                     {s}
-                    <button
-                      type="button"
-                      onClick={() => removeSrv(idx)}
-                      className="text-gray-400 hover:text-white"
-                    >
-                      ×
+                    <button type="button" onClick={() => removeSrv(idx)} aria-label={`Remove ${s}`}>
+                      <X size={12} />
                     </button>
                   </span>
                 ))}
               </div>
             </div>
           </div>
+        </section>
 
-          {/* Portfolio Items */}
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 space-y-4">
-            <h2 className="text-lg font-semibold">Portfolio Showcases</h2>
-            <div className="grid sm:grid-cols-2 gap-3">
-              <input
-                type="text"
-                value={portfolioTitle}
-                onChange={(e) => setPortfolioTitle(e.target.value)}
-                placeholder="Project title (e.g. Nike Brand Anthem)"
-                className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm"
-              />
-              <input
-                type="url"
-                value={portfolioUrl}
-                onChange={(e) => setPortfolioUrl(e.target.value)}
-                placeholder="Video URL (YouTube/Vimeo/Drive)"
-                className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm"
-              />
+        {/* Portfolio Items */}
+        <section className="form-panel">
+          <div className="form-section-title">
+            <Globe size={16} color="var(--violet)" />
+            <h3>Portfolio Showcases</h3>
+            <small>Client Discovery Evidence</small>
+          </div>
+
+          <div className="stack-form">
+            <div className="form-grid">
+              <label>
+                Project Title
+                <input
+                  type="text"
+                  value={portfolioTitle}
+                  onChange={(e) => setPortfolioTitle(e.target.value)}
+                  placeholder="e.g. Nike Brand Anthem"
+                />
+              </label>
+
+              <label>
+                Video URL (YouTube/Vimeo/Drive)
+                <input
+                  type="url"
+                  value={portfolioUrl}
+                  onChange={(e) => setPortfolioUrl(e.target.value)}
+                  placeholder="https://vimeo.com/…"
+                />
+              </label>
             </div>
-            <textarea
-              rows={2}
-              value={portfolioDesc}
-              onChange={(e) => setPortfolioDesc(e.target.value)}
-              placeholder="Brief description of the work and scope…"
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm"
-            />
-            <button
-              type="button"
-              onClick={addPortfolioItem}
-              className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-white rounded-lg text-sm font-medium"
-            >
-              Add Portfolio Work
-            </button>
+
+            <label>
+              Scope / Description
+              <textarea
+                rows={2}
+                value={portfolioDesc}
+                onChange={(e) => setPortfolioDesc(e.target.value)}
+                placeholder="Brief description of the work and scope…"
+              />
+            </label>
+
+            <div>
+              <button
+                type="button"
+                onClick={addPortfolioItem}
+                className="quiet-button"
+                style={{ height: "34px" }}
+              >
+                <Plus size={14} /> Add Portfolio Work
+              </button>
+            </div>
 
             {portfolio.length > 0 && (
-              <div className="space-y-3 pt-2">
+              <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginTop: "10px" }}>
                 {portfolio.map((item, idx) => (
                   <div
                     key={idx}
-                    className="flex items-start justify-between bg-gray-800/60 border border-gray-700/60 p-3 rounded-lg"
+                    className="panel"
+                    style={{
+                      padding: "12px 16px",
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "flex-start",
+                      background: "rgba(255,255,255,.02)",
+                    }}
                   >
                     <div>
-                      <div className="font-medium text-sm text-white">{item.title}</div>
+                      <b style={{ color: "#fff", fontSize: "12px", display: "block" }}>{item.title}</b>
                       <a
                         href={item.video_url}
                         target="_blank"
                         rel="noreferrer"
-                        className="text-xs text-purple-400 hover:underline"
+                        style={{ color: "var(--violet)", fontSize: "11px", display: "inline-flex", alignItems: "center", gap: "4px", marginTop: "3px" }}
                       >
-                        {item.video_url}
+                        {item.video_url} <ExternalLink size={12} />
                       </a>
                       {item.description && (
-                        <p className="text-xs text-gray-400 mt-1">{item.description}</p>
+                        <p style={{ margin: "5px 0 0", color: "#94a3b8", fontSize: "11px" }}>
+                          {item.description}
+                        </p>
                       )}
                     </div>
                     <button
                       type="button"
                       onClick={() => removePortfolioItem(idx)}
-                      className="text-red-400 hover:text-red-300 text-xs px-2 py-1"
+                      className="icon-button"
+                      title="Delete portfolio item"
+                      style={{ color: "#ff777d" }}
                     >
-                      Delete
+                      <Trash2 size={14} />
                     </button>
                   </div>
                 ))}
               </div>
             )}
           </div>
+        </section>
 
-          <div className="flex justify-end gap-3 pt-2">
-            <button
-              type="submit"
-              disabled={saving}
-              className="px-6 py-2.5 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white rounded-lg text-sm font-medium transition-colors"
-            >
-              {saving ? "Saving Changes…" : "Save Agency Profile"}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", marginTop: "10px" }}>
+          <button type="submit" disabled={saving} className="primary-button" style={{ height: "42px", padding: "0 22px" }}>
+            <Save size={15} />
+            {saving ? "Saving Changes…" : "Save Agency Profile"}
+          </button>
+        </div>
+      </form>
+    </AppLayout>
   );
 }
