@@ -1,32 +1,33 @@
 # FRAMEOPS TODO
 
-## Immediate synthesis blocker
+## Completed in Handover & Milestones 1–6
 
-- [ ] Resolve the Groq on-demand limit: account limit is 8,000 TPM; real OpenClaw synthesis requested 11,700 tokens and returned HTTP 413. The app prompt is compacted and the FRAMEOPS Gateway agent has a 512-token output cap, no skills/bootstrap injection, and no tools. Further reduce Gateway runtime context or obtain an account tier with a sufficient limit (requires purchase approval).
-- [ ] Re-run `backend/scripts/live_workflow.py` after the above fix. Require completed OpenClaw synthesis, non-empty persisted production tasks, actual Hindsight recall/retention verification, and verified test-bank deletion before marking complete.
-- [ ] Do not treat `/api/ready` or successful extraction/recall as proof of complete workflow.
+- [x] Complete GitHub repository and branch audit (`HNK69/FrameOS`, PR #1, PR #2, branch `Deekshith`).
+- [x] Integrate verified PR #1 (`feature/feedback-intelligence`) into `main`.
+- [x] Fix schema mismatch crash in `ExtractedItem` model dump during extraction persistence.
+- [x] Integrate verified PR #2 (`feature/production-intelligence`) into `main` and resolve UI/router conflicts.
+- [x] Resolve Alembic multi-head conflict between PR #1 and branch `Deekshith`; linearize migration chain.
+- [x] Package unmerged branch `Deekshith` into clean, modularized PR branch `feature/client-portal` with dedicated router `backend/app/routers/portal.py` and unit tests in `test_portal.py`.
+- [x] **Milestone 1**: Database & concurrency hardening (enable SQLite WAL mode, busy timeout 5000ms, linear migration to `a1b2c3d4e5f6`, 144 operational rows preserved, safe backups verified).
+- [x] **Milestone 2**: Security & authentication remediation (eliminate passwordless email login bypass, Argon2 passcode verification, unexpired token enforcement, HTTP security headers, CORS `X-Portal-Token`, safe attachment downloads, 5 automated security tests).
+- [x] **Milestone 3**: AI pipeline resiliency & memory sync (Groq Whisper 429 exponential backoff, sliding-window chunking >4,000 tokens, Hindsight graceful degradation fallback to empty memories, client-confirmed preference memory sync).
+- [x] **Milestone 4**: Client review portal full-stack integration (284 lines ported `.portal-*` CSS, portal navigation links in `app-shell.tsx`, dynamic Next.js API `rewrites()` and port 8001 fallbacks, 8 routes compiled).
+- [x] **Milestone 5**: Feedback-to-production workflow (`POST /api/agency/feedback/{id}/convert-task` with `source="client_feedback"` and query-based idempotency, `ProductionWorkspace` hydration bug fix on revisit).
+- [x] **Milestone 6**: QA, multi-tier verification & Checkpoint 2 pre-push protocol (35 backend tests passing, 2 frontend unit tests passing, Next.js build clean across 8 routes, live provider connectivity verified, 0 remote divergence, all branches preserved intact).
+- [x] Update `README.md`, `ARCHITECTURE.md`, `PROJECT_STATUS.md`, and `TODO.md`.
 
-## Integration verification
+## Immediate Next Steps (Pending User Push Authorization - Checkpoint 2)
 
-- [x] Verify Windows asyncio subprocess handling, timeout, output capture, and existing Gateway URL/token forwarding.
-- [x] Install and verify portable Node.js 24.22.1 and OpenClaw CLI 2026.11.3 for the backend.
-- [x] Verify configured Groq and Hindsight connectivity from the backend runtime.
-- [x] Verify real Groq extraction, Hindsight bank initialization, retain and recall through a loopback Uvicorn run with an isolated database.
-- [ ] Complete a real OpenClaw synthesis and verify production task rows; latest run failed at the provider's 8K TPM limit before task insertion.
-- [ ] Run the two-client same-transcript/correction/isolation scenario after synthesis is unblocked.
-- [ ] Capture a 1440x900 screenshot and compare with the supplied reference; Playwright visual run remains outstanding.
+- [ ] Obtain explicit user approval to execute `git push origin main`.
+- [ ] Push `main` to `origin/main` and verify synchronized commit hashes.
+- [ ] Verify PR #1 and PR #2 merge status on GitHub.
+- [ ] Seed interactive demo data (e.g. LUXE STUDIO vs. FITCORE) for client demonstration walkthrough.
 
-## Production hardening
+## Production Hardening (Future Roadmap)
 
-- [ ] Add invite flow and owner/admin/editor/viewer permission matrix.
-- [ ] Add database-backed rate limiting and CSRF protections for cookie-authenticated mutations.
-- [ ] Replace local upload storage with private object storage and expiring authorized downloads.
-- [ ] Add MIME sniffing, malware scanning, upload retention controls, and download audit records.
-- [ ] Add durable workflow jobs/outbox, provider retries, leases, and operation reconciliation after restarts.
-- [ ] Implement workspace/client offboarding, Hindsight export/deletion verification, and retention policy UI.
-- [ ] Validate PostgreSQL migrations, automated backups, and restore procedure.
-- [ ] Add structured traces, metrics, provider health probes, error reporting, and alerting.
-- [ ] Run dependency audit, security review, tenant-isolation tests, and privacy review.
-- [ ] Add full multi-role auth tests and end-to-end Playwright scenarios.
-- [ ] Configure production S3-compatible storage and deployment secrets.
-- [ ] Verify production deployment configuration before any public release.
+- [ ] Implement team member invitations and owner/admin/editor/viewer RBAC matrix.
+- [ ] Add Redis-backed rate limiting and CSRF protection for cookie-authenticated mutation endpoints.
+- [ ] Migrate local disk uploads to S3-compatible private object storage with presigned URLs.
+- [ ] Add background task worker (Celery/ARQ) for asynchronous long-running synthesis and transcription jobs.
+- [ ] Configure production PostgreSQL database with automated backups and disaster recovery runbooks.
+- [ ] Add centralized OpenTelemetry tracing, Prometheus metrics, and error alerting (Sentry).

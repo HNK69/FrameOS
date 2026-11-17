@@ -18,7 +18,7 @@ from pathlib import Path
 import httpx
 
 ROOT = Path(__file__).resolve().parents[1]
-PORT = 8000
+PORT = int(os.environ.get("PORT", 8001))
 BASE = f"http://127.0.0.1:{PORT}"
 DB = ROOT / ".live-workflow-check.db"
 LOG = ROOT / ".live-workflow-check.log"

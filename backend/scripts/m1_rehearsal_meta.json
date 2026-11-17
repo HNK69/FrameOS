@@ -1,0 +1,32 @@
+{
+  "rehearsal_db_path": "C:\\Users\\hnkru\\OneDrive\\Desktop\\FrameOPS\\backend\\frameops_rehearse.db",
+  "pre_migration_version": "a1b2c3d4e5f6",
+  "post_migration_version": "b2c3d4e5f6a7",
+  "integrity_check": [
+    [
+      "ok"
+    ]
+  ],
+  "foreign_key_check": [],
+  "required_new_tables": [
+    "agency_profiles",
+    "client_profiles",
+    "project_requests",
+    "proposals",
+    "project_messages"
+  ],
+  "baseline_table_counts": {
+    "users": 1,
+    "workspaces": 1,
+    "memberships": 1,
+    "clients": 9,
+    "projects": 13,
+    "transcripts": 16,
+    "processing_runs": 16,
+    "extracted_items": 56,
+    "memory_operations": 31
+  },
+  "total_baseline_records": 144,
+  "active_db_pristine": true,
+  "active_db_sha256": "4657c1cc623b2bc510fd7c7d90d0e32dfb98dc13f7d76a21914a409590b92014"
+}

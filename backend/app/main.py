@@ -10,7 +10,7 @@ from uuid import uuid4
 from fastapi import Depends, FastAPI, File, Header, HTTPException, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
-from sqlalchemy import func, select, text
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from .config import settings
@@ -34,29 +34,23 @@ from .models import (
     Workspace,
     now_utc,
 )
+from .routers.agency_profile import router as agency_profile_router
+from .routers.auth import router as auth_router
+from .routers.discovery import router as discovery_router
+from .routers.feedback import router as feedback_router
+from .routers.portal import router as portal_router
+from .routers.production_intelligence import router as production_router
+from .routers.project_requests import router as project_requests_router
 from .schemas import (
     ClientInput,
     FeedbackInput,
-    LoginInput,
-    PortalCommentInput,
-    PortalDecisionInput,
-    PortalDraftInput,
-    PortalFeedbackSubmitInput,
-    PortalLoginInput,
     ProcessInput,
     ProjectInput,
     RetainInput,
-    SetupInput,
 )
-from .security import (
-    current_client_identity,
-    current_identity,
-    hash_password,
-    issue_client_token,
-    issue_token,
-    verify_password,
-)
+from .security import current_identity, validate_upload_security
 from .services import groq, hindsight, openclaw
+from .services.production_analytics import get_production_analytics
 
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"), format="%(message)s")
 log = logging.getLogger("frameops")
@@ -68,10 +62,39 @@ async def lifespan(_app: FastAPI):
 
 
 app = FastAPI(title="FRAMEOPS API", version="0.1.0", lifespan=lifespan)
+app.include_router(auth_router)
+app.include_router(agency_profile_router)
+app.include_router(discovery_router)
+app.include_router(feedback_router)
+app.include_router(production_router)
+app.include_router(portal_router)
+app.include_router(project_requests_router)
 origins = [origin.strip() for origin in settings.cors_origins.split(",") if origin.strip()]
 app.add_middleware(CORSMiddleware, allow_origins=origins, allow_credentials=True,
                    allow_methods=["GET", "POST", "PATCH", "DELETE"],
                    allow_headers=["Authorization", "Content-Type", "Idempotency-Key", "X-Portal-Token"])
+
+
+@app.middleware("http")
+async def add_security_headers(request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "SAMEORIGIN"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(self), geolocation=()"
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data: blob: https:; "
+        "font-src 'self' data:; "
+        "media-src 'self' blob: data:; "
+        "connect-src 'self' ws: wss: http: https:; "
+        "frame-ancestors 'self';"
+    )
+    if request.url.scheme == "https" or settings.auth_cookie_secure:
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    return response
 
 
 def _client_dict(c: Client, db: Session) -> dict:
@@ -124,9 +147,13 @@ def _remember_op(db: Session, *, workspace_id: int, client_id: int, project_id: 
     return row
 
 
-def _memory_text(result: dict) -> list[dict]:
-    found = result.get("results", result.get("memories", []))
-    return found if isinstance(found, list) else []
+def _memory_text(result: dict | list) -> list[dict]:
+    if isinstance(result, list):
+        return result
+    if isinstance(result, dict):
+        found = result.get("results", result.get("memories", []))
+        return found if isinstance(found, list) else []
+    return []
 
 
 @app.get("/api/health")
@@ -149,57 +176,6 @@ def ready(db: Session = Depends(get_db)):
     }
     status = "ready" if database == "ready" and all(v == "configured" for v in integrations.values()) else "degraded"
     return {"status": status, "database": database, "integrations": integrations}
-
-
-@app.get("/api/auth/status")
-def auth_status(db: Session = Depends(get_db)):
-    return {"setup_required": db.query(User).count() == 0, "auth_ready": bool(settings.auth_secret)}
-
-
-def _set_auth_cookie(response: Response, token: str):
-    response.set_cookie("frameops_session", token, max_age=settings.auth_token_minutes * 60,
-                        httponly=True, secure=settings.auth_cookie_secure, samesite="lax", path="/")
-
-
-@app.post("/api/auth/setup")
-def setup(data: SetupInput, response: Response, db: Session = Depends(get_db)):
-    if not settings.auth_secret:
-        raise HTTPException(503, "Set AUTH_SECRET before creating the workspace owner")
-    if db.query(User).count():
-        raise HTTPException(409, "Initial owner is already configured")
-    user = User(email=data.email.lower(), password_hash=hash_password(data.password))
-    workspace = Workspace(name=data.workspace_name.strip())
-    db.add_all([user, workspace])
-    db.flush()
-    member = Membership(workspace_id=workspace.id, user_id=user.id, role="owner")
-    db.add(member)
-    db.commit()
-    _set_auth_cookie(response, issue_token(user, member))
-    return {"workspace": {"id": workspace.id, "name": workspace.name}}
-
-
-@app.post("/api/auth/login")
-def login(data: LoginInput, response: Response, db: Session = Depends(get_db)):
-    user = db.scalar(select(User).where(User.email == data.email.lower()))
-    if not user or not verify_password(data.password, user.password_hash):
-        raise HTTPException(401, "Invalid email or password")
-    member = db.scalar(select(Membership).where(Membership.user_id == user.id).order_by(Membership.id))
-    if not member:
-        raise HTTPException(403, "No workspace membership")
-    _set_auth_cookie(response, issue_token(user, member))
-    return {"workspace": {"id": member.workspace_id, "name": member.workspace.name}}
-
-
-@app.post("/api/auth/logout")
-def logout(response: Response):
-    response.delete_cookie("frameops_session", path="/", httponly=True, secure=settings.auth_cookie_secure, samesite="lax")
-    return {"logged_out": True}
-
-
-@app.get("/api/me")
-def me(identity=Depends(current_identity)):
-    user, workspace_id, role = identity
-    return {"id": user.id, "email": user.email, "workspace_id": workspace_id, "role": role}
 
 
 @app.get("/api/clients")
@@ -302,7 +278,8 @@ def create_project(data: ProjectInput, db: Session = Depends(get_db), identity=D
 def get_project(project_id: int, db: Session = Depends(get_db), identity=Depends(current_identity)):
     _, wid, _ = identity
     project = _get_project(db, project_id, wid)
-    runs = db.scalars(select(ProcessingRun).where(ProcessingRun.project_id == project.id).order_by(ProcessingRun.created_at.desc())).all()
+    runs = db.scalars(select(ProcessingRun).where(ProcessingRun.project_id == project.id)
+                      .order_by(ProcessingRun.created_at.desc(), ProcessingRun.id.desc())).all()
     return {**_project_dict(project), "runs": [run_dict(db, r) for r in runs],
             "assets": [asset_dict(a) for a in db.scalars(select(Asset).where(Asset.project_id == project.id)).all()]}
 
@@ -338,16 +315,8 @@ async def upload_asset(project_id: int, file: UploadFile = File(...), category: 
     user, wid, _ = identity
     project = _get_project(db, project_id, wid)
     client = _get_client(db, project.client_id, wid)
-    safe_name = Path(file.filename or "upload.bin").name[:255]
     content = await file.read(settings.max_upload_bytes + 1)
-    if not content or len(content) > settings.max_upload_bytes:
-        raise HTTPException(413, "File is empty or exceeds the upload size limit")
-    content_type = file.content_type or mimetypes.guess_type(safe_name)[0] or "application/octet-stream"
-    allowed = {"image/png", "image/jpeg", "image/webp", "image/svg+xml", "font/woff", "font/woff2",
-               "audio/mpeg", "audio/wav", "video/mp4", "video/quicktime", "application/pdf",
-               "text/plain", "text/markdown", "application/json", "application/octet-stream"}
-    if content_type not in allowed:
-        raise HTTPException(415, "Unsupported asset content type")
+    safe_name, content_type = validate_upload_security(file.filename or "upload.bin", content)
     folder = Path(settings.upload_dir).resolve() / str(wid) / str(project.id)
     folder.mkdir(parents=True, exist_ok=True)
     storage_key = f"{wid}/{project.id}/{uuid4().hex}"
@@ -368,7 +337,12 @@ def download_asset(asset_id: int, db: Session = Depends(get_db), identity=Depend
     asset = db.scalar(select(Asset).where(Asset.id == asset_id, Asset.workspace_id == wid))
     if not asset or not Path(asset.storage_key).is_file():
         raise HTTPException(404, "Asset not found")
-    return FileResponse(asset.storage_key, filename=asset.filename, media_type=asset.content_type)
+    safe_filename = asset.filename.replace('"', '\\"')
+    headers = {
+        "Content-Disposition": f'attachment; filename="{safe_filename}"',
+        "X-Content-Type-Options": "nosniff",
+    }
+    return FileResponse(asset.storage_key, filename=asset.filename, media_type=asset.content_type, headers=headers)
 
 
 @app.post("/api/process-transcript", status_code=201)
@@ -403,16 +377,32 @@ async def process_transcript(data: ProcessInput, idempotency_key: str | None = H
     try:
         extracted = await groq.extract_feedback(data.transcript.strip())
         for item in extracted.requests:
-            db.add(ExtractedItem(run_id=run.id, **item.model_dump()))
+            db.add(ExtractedItem(
+                run_id=run.id,
+                description=item.description,
+                category=item.category,
+                source_quote=item.source_quote,
+                classification=item.classification,
+                confidence=item.confidence,
+                requires_confirmation=item.requires_confirmation,
+            ))
         db.commit()
         run.stage = "recalling"
         db.commit()
         query = "\n".join(i.description for i in extracted.requests) or "Client preferences, editing requirements, recurring revisions"
-        recall = await hindsight.recall(client.memory_bank_id, query)
-        _remember_op(db, workspace_id=wid, client_id=client.id, project_id=project.id, run_id=run.id,
-                     operation="recall", status="completed", key=f"{key}:recall",
-                     details=f"Retrieved {len(_memory_text(recall))} historical entries.")
-        db.commit()
+        recall: dict | list = {"results": []}
+        try:
+            recall = await hindsight.recall(client.memory_bank_id, query)
+            _remember_op(db, workspace_id=wid, client_id=client.id, project_id=project.id, run_id=run.id,
+                         operation="recall", status="completed", key=f"{key}:recall",
+                         details=f"Retrieved {len(_memory_text(recall))} historical entries.")
+            db.commit()
+        except Exception as exc:
+            recall = {"results": []}
+            _remember_op(db, workspace_id=wid, client_id=client.id, project_id=project.id, run_id=run.id,
+                         operation="recall", status="degraded", key=f"{key}:recall",
+                         details=f"Hindsight recall degraded: {type(exc).__name__}: {str(exc)[:500]}")
+            db.commit()
         asset_rows = db.scalars(select(Asset).where(Asset.project_id == project.id)).all()
         uploaded_assets = [{"name": a.filename, "category": a.category, "status": "Present", "content_type": a.content_type} for a in asset_rows]
         requirements = [r.model_dump() for r in extracted.required_assets]
@@ -443,7 +433,7 @@ async def process_transcript(data: ProcessInput, idempotency_key: str | None = H
         run = db.get(ProcessingRun, run.id)
         run.status = "failed"
         run.stage = "failed"
-        run.error = str(exc)[:1200]
+        run.error = str(exc).strip()[:1200] or type(exc).__name__
         run.completed_at = now_utc()
         db.commit()
         if isinstance(exc, groq.ServiceUnavailable):
@@ -472,7 +462,9 @@ def task_dict(t: ProductionTask) -> dict:
     return {"id": t.id, "title": t.title, "category": t.category, "instruction": t.instruction,
             "resolve_workflow": t.resolve_workflow, "priority": t.priority, "source": t.source,
             "evidence": t.evidence, "confidence": t.confidence,
-            "requires_confirmation": t.requires_confirmation, "status": t.status}
+            "requires_confirmation": t.requires_confirmation, "status": t.status,
+            "project_id": t.project_id, "client_id": t.client_id, "run_id": t.run_id,
+            "created_at": t.created_at.isoformat() if t.created_at else None}
 
 
 @app.get("/api/runs/{run_id}")
@@ -490,7 +482,10 @@ async def list_memories(client_id: int, db: Session = Depends(get_db), identity=
     client = _get_client(db, client_id, wid)
     if not hindsight.configured():
         raise HTTPException(503, "Hindsight is not configured")
-    result = await hindsight.call_memory("GET", client.memory_bank_id, "list", {})
+    try:
+        result = await hindsight.call_memory("GET", client.memory_bank_id, "list", {})
+    except groq.ServiceUnavailable as exc:
+        raise HTTPException(503, str(exc)) from exc
     return {"client_id": client_id, "memories": _memory_text(result)}
 
 
@@ -498,7 +493,10 @@ async def list_memories(client_id: int, db: Session = Depends(get_db), identity=
 async def memory_recall(client_id: int, query: str, db: Session = Depends(get_db), identity=Depends(current_identity)):
     _, wid, _ = identity
     client = _get_client(db, client_id, wid)
-    return await hindsight.recall(client.memory_bank_id, query)
+    try:
+        return await hindsight.recall(client.memory_bank_id, query)
+    except groq.ServiceUnavailable as exc:
+        raise HTTPException(503, str(exc)) from exc
 
 
 @app.post("/api/memory/retain")
@@ -553,7 +551,10 @@ async def memory_retain(data: RetainInput, idempotency_key: str | None = Header(
 async def memory_reflect(client_id: int, query: str, db: Session = Depends(get_db), identity=Depends(current_identity)):
     _, wid, _ = identity
     client = _get_client(db, client_id, wid)
-    return await hindsight.reflect(client.memory_bank_id, query)
+    try:
+        return await hindsight.reflect(client.memory_bank_id, query)
+    except groq.ServiceUnavailable as exc:
+        raise HTTPException(503, str(exc)) from exc
 
 
 @app.post("/api/tasks/{task_id}/feedback")
@@ -564,7 +565,9 @@ async def feedback(task_id: int, data: FeedbackInput, db: Session = Depends(get_
         raise HTTPException(404, "Task not found")
     if data.action == "correct" and not data.correction.strip():
         raise HTTPException(422, "A correction is required for the correct action")
-    task.status = {"accept": "accepted", "correct": "corrected", "reject": "rejected"}[data.action]
+    task.status = {"accept": "accepted", "correct": "corrected", "reject": "rejected"}.get(data.action, data.action)
+    if data.priority:
+        task.priority = data.priority
     feedback_row = Feedback(workspace_id=wid, client_id=task.client_id, project_id=task.project_id,
                             task_id=task.id, author_id=user.id, action=data.action,
                             original_recommendation=task.instruction, correction=data.correction.strip(),
@@ -610,734 +613,4 @@ async def feedback(task_id: int, data: FeedbackInput, db: Session = Depends(get_
 @app.get("/api/analytics")
 def analytics(db: Session = Depends(get_db), identity=Depends(current_identity)):
     _, wid, _ = identity
-    clients = db.query(Client).filter_by(workspace_id=wid).count()
-    active = db.query(Project).filter_by(workspace_id=wid, status="active").count()
-    completed = db.query(Project).filter_by(workspace_id=wid, status="completed").count()
-    memories = db.query(MemoryOperation).filter_by(workspace_id=wid, operation="retain", status="completed").count()
-    recalls = db.query(MemoryOperation).filter_by(workspace_id=wid, operation="recall", status="completed").count()
-    tasks_completed = db.query(ProductionTask).filter_by(workspace_id=wid, status="accepted").count()
-    pending = db.query(ProductionTask).filter_by(workspace_id=wid, status="pending").count()
-    history = db.execute(select(func.date(ProcessingRun.created_at), func.count(ProcessingRun.id))
-                         .where(ProcessingRun.workspace_id == wid).group_by(func.date(ProcessingRun.created_at))
-                         .order_by(func.date(ProcessingRun.created_at))).all()
-    return {"clients": clients, "active_projects": active, "completed_projects": completed,
-            "memories_retained": memories, "memory_retrievals": recalls,
-            "tasks_completed": tasks_completed, "pending_confirmations": pending,
-            "activity": [{"date": str(day), "runs": count} for day, count in history]}
-
-
-@app.get("/api/tasks")
-def list_tasks(project_id: int | None = None, status: str | None = None,
-               db: Session = Depends(get_db), identity=Depends(current_identity)):
-    _, wid, _ = identity
-    stmt = select(ProductionTask).where(ProductionTask.workspace_id == wid)
-    if project_id is not None:
-        stmt = stmt.where(ProductionTask.project_id == project_id)
-    if status and status != "all":
-        stmt = stmt.where(ProductionTask.status == status)
-    return [task_dict(t) for t in db.scalars(stmt.order_by(ProductionTask.created_at.desc())).all()]
-
-
-# ==============================================================================
-# CLIENT PORTAL HELPERS & ENDPOINTS
-# ==============================================================================
-
-def _ensure_portal_access(db: Session, client: Client) -> ClientPortalAccess:
-    access = db.scalar(select(ClientPortalAccess).where(ClientPortalAccess.client_id == client.id))
-    if not access:
-        token = f"portal-{client.id}-{uuid4().hex}"
-        passcode = f"{client.name[:4].strip().upper() or 'CLNT'}-{uuid4().hex[:6].upper()}"
-        access = ClientPortalAccess(
-            workspace_id=client.workspace_id,
-            client_id=client.id,
-            access_token=token,
-            passcode=passcode,
-            client_email="",
-        )
-        db.add(access)
-        db.commit()
-        db.refresh(access)
-    return access
-
-
-def _ensure_review_version(db: Session, project: Project) -> ReviewVersion:
-    version = db.scalar(
-        select(ReviewVersion).where(ReviewVersion.project_id == project.id).order_by(ReviewVersion.created_at.desc())
-    )
-    if not version:
-        # Check if project already has a video asset
-        video_asset = db.scalar(
-            select(Asset).where(
-                Asset.project_id == project.id,
-                (Asset.content_type.like("video/%")) | (Asset.category.in_(["footage", "review_video", "deliverable"]))
-            ).order_by(Asset.created_at.desc())
-        )
-        version = ReviewVersion(
-            workspace_id=project.workspace_id,
-            client_id=project.client_id,
-            project_id=project.id,
-            version_label="v1 - Initial Review Cut",
-            video_asset_id=video_asset.id if video_asset else None,
-            video_url=f"/api/portal/assets/{video_asset.id}/stream" if video_asset else "",
-            status="in_review",
-            change_summary="Initial delivery for client creative review and feedback.",
-        )
-        db.add(version)
-        db.commit()
-        db.refresh(version)
-    return version
-
-
-def _get_portal_project(db: Session, project_id: int, client_id: int, workspace_id: int) -> Project:
-    project = db.scalar(
-        select(Project).where(
-            Project.id == project_id,
-            Project.client_id == client_id,
-            Project.workspace_id == workspace_id,
-        )
-    )
-    if not project:
-        raise HTTPException(404, "Project not found or not assigned to your client account")
-    return project
-
-
-def _review_version_dict(v: ReviewVersion) -> dict:
-    return {
-        "id": v.id,
-        "project_id": v.project_id,
-        "version_label": v.version_label,
-        "video_asset_id": v.video_asset_id,
-        "video_url": v.video_url,
-        "status": v.status,
-        "change_summary": v.change_summary,
-        "created_at": v.created_at.isoformat(),
-    }
-
-
-def _comment_dict(c: VideoComment) -> dict:
-    return {
-        "id": c.id,
-        "project_id": c.project_id,
-        "review_version_id": c.review_version_id,
-        "timestamp_seconds": c.timestamp_seconds,
-        "timecode": c.timecode,
-        "author_name": c.author_name,
-        "content": c.content,
-        "status": c.status,
-        "created_at": c.created_at.isoformat(),
-    }
-
-
-def _submission_dict(s: ClientFeedbackSubmission) -> dict:
-    parsed_items = []
-    if s.structured_data:
-        try:
-            parsed_items = json.loads(s.structured_data)
-        except Exception:
-            parsed_items = []
-    return {
-        "id": s.id,
-        "project_id": s.project_id,
-        "review_version_id": s.review_version_id,
-        "feedback_type": s.feedback_type,
-        "author_name": s.author_name,
-        "content": s.content,
-        "items": parsed_items,
-        "audio_asset_id": s.audio_asset_id,
-        "status": s.status,
-        "review_decision": s.review_decision,
-        "created_at": s.created_at.isoformat(),
-    }
-
-
-def _portal_project_dict(p: Project, db: Session) -> dict:
-    latest_version = _ensure_review_version(db, p)
-    submissions_count = db.query(ClientFeedbackSubmission).filter_by(project_id=p.id).count()
-    comments_count = db.query(VideoComment).filter_by(project_id=p.id).count()
-    unresolved_comments = db.query(VideoComment).filter(
-        VideoComment.project_id == p.id,
-        VideoComment.status != "resolved"
-    ).count()
-
-    return {
-        "id": p.id,
-        "name": p.name,
-        "description": p.description,
-        "status": p.status,
-        "due_date": p.due_date.isoformat() if p.due_date else None,
-        "created_at": p.created_at.isoformat(),
-        "client_name": p.client.name if p.client else "",
-        "brand": p.client.brand if p.client else "",
-        "current_version": _review_version_dict(latest_version),
-        "submissions_count": submissions_count,
-        "comments_count": comments_count,
-        "unresolved_comments_count": unresolved_comments,
-    }
-
-
-def _set_portal_cookie(response: Response, token: str):
-    response.set_cookie(
-        "frameops_portal_session",
-        token,
-        max_age=30 * 24 * 3600,
-        httponly=True,
-        secure=settings.auth_cookie_secure,
-        samesite="lax",
-        path="/",
-    )
-
-
-# --- Agency View: Client Portal Link Generation ---
-
-@app.get("/api/clients/{client_id}/portal-access")
-def get_client_portal_access(client_id: int, db: Session = Depends(get_db), identity=Depends(current_identity)):
-    _, wid, _ = identity
-    client = _get_client(db, client_id, wid)
-    access = _ensure_portal_access(db, client)
-    return {
-        "client_id": client.id,
-        "client_name": client.name,
-        "access_token": access.access_token,
-        "passcode": access.passcode,
-        "portal_path": f"/portal?token={access.access_token}",
-        "last_accessed_at": access.last_accessed_at.isoformat() if access.last_accessed_at else None,
-    }
-
-
-# --- Client Authentication ---
-
-@app.post("/api/portal/auth/login")
-def portal_login(data: PortalLoginInput, response: Response, db: Session = Depends(get_db)):
-    access = None
-    if data.token:
-        access = db.scalar(select(ClientPortalAccess).where(ClientPortalAccess.access_token == data.token.strip()))
-    elif data.code:
-        access = db.scalar(
-            select(ClientPortalAccess).where(func.upper(ClientPortalAccess.passcode) == data.code.strip().upper())
-        )
-    elif data.email:
-        access = db.scalar(
-            select(ClientPortalAccess).where(func.lower(ClientPortalAccess.client_email) == data.email.strip().lower())
-        )
-
-    if not access:
-        raise HTTPException(401, "Invalid client portal access token or code")
-
-    client = db.get(Client, access.client_id)
-    if not client:
-        raise HTTPException(404, "Client record does not exist")
-
-    token = issue_client_token(client)
-    _set_portal_cookie(response, token)
-    access.last_accessed_at = now_utc()
-    db.commit()
-
-    return {
-        "token": token,
-        "client": {
-            "id": client.id,
-            "name": client.name,
-            "brand": client.brand,
-            "industry": client.industry,
-            "description": client.description,
-        },
-        "workspace_id": client.workspace_id,
-    }
-
-
-@app.get("/api/portal/auth/me")
-def portal_me(client_identity=Depends(current_client_identity), db: Session = Depends(get_db)):
-    client, wid = client_identity
-    access = _ensure_portal_access(db, client)
-    projects_count = db.query(Project).filter_by(client_id=client.id, workspace_id=wid).count()
-    return {
-        "client": {
-            "id": client.id,
-            "name": client.name,
-            "brand": client.brand,
-            "industry": client.industry,
-            "description": client.description,
-        },
-        "access_code": access.passcode,
-        "projects_count": projects_count,
-        "workspace_id": wid,
-    }
-
-
-@app.post("/api/portal/auth/logout")
-def portal_logout(response: Response):
-    response.delete_cookie(
-        "frameops_portal_session",
-        path="/",
-        httponly=True,
-        secure=settings.auth_cookie_secure,
-        samesite="lax",
-    )
-    return {"logged_out": True}
-
-
-# --- Client Project Overview & Details ---
-
-@app.get("/api/portal/projects")
-def portal_list_projects(
-    db: Session = Depends(get_db),
-    client_identity=Depends(current_client_identity),
-):
-    client, wid = client_identity
-    projects = db.scalars(
-        select(Project).where(
-            Project.client_id == client.id,
-            Project.workspace_id == wid,
-        ).order_by(Project.created_at.desc())
-    ).all()
-    return [_portal_project_dict(p, db) for p in projects]
-
-
-@app.get("/api/portal/projects/{project_id}")
-def portal_get_project(
-    project_id: int,
-    db: Session = Depends(get_db),
-    client_identity=Depends(current_client_identity),
-):
-    client, wid = client_identity
-    project = _get_portal_project(db, project_id, client.id, wid)
-    base = _portal_project_dict(project, db)
-
-    # All versions
-    versions = db.scalars(
-        select(ReviewVersion).where(
-            ReviewVersion.project_id == project.id,
-            ReviewVersion.workspace_id == wid,
-        ).order_by(ReviewVersion.created_at.desc())
-    ).all()
-
-    # Timestamped video comments
-    comments = db.scalars(
-        select(VideoComment).where(
-            VideoComment.project_id == project.id,
-            VideoComment.workspace_id == wid,
-        ).order_by(VideoComment.timestamp_seconds.asc())
-    ).all()
-
-    # Feedback submissions
-    submissions = db.scalars(
-        select(ClientFeedbackSubmission).where(
-            ClientFeedbackSubmission.project_id == project.id,
-            ClientFeedbackSubmission.workspace_id == wid,
-        ).order_by(ClientFeedbackSubmission.created_at.desc())
-    ).all()
-
-    # Video/Media assets available
-    assets = db.scalars(
-        select(Asset).where(
-            Asset.project_id == project.id,
-            Asset.workspace_id == wid,
-        ).order_by(Asset.created_at.desc())
-    ).all()
-
-    return {
-        **base,
-        "versions": [_review_version_dict(v) for v in versions],
-        "comments": [_comment_dict(c) for c in comments],
-        "feedback_submissions": [_submission_dict(s) for s in submissions],
-        "assets": [
-            {
-                "id": a.id,
-                "filename": a.filename,
-                "category": a.category,
-                "content_type": a.content_type,
-                "size_bytes": a.size_bytes,
-                "stream_url": f"/api/portal/assets/{a.id}/stream",
-                "created_at": a.created_at.isoformat(),
-            }
-            for a in assets
-        ],
-    }
-
-
-# --- AI-Structured Feedback Review Screen (Draft Extraction) ---
-
-@app.post("/api/portal/projects/{project_id}/feedback/draft")
-async def draft_portal_feedback(
-    project_id: int,
-    data: PortalDraftInput,
-    db: Session = Depends(get_db),
-    client_identity=Depends(current_client_identity),
-):
-    client, wid = client_identity
-    _get_portal_project(db, project_id, client.id, wid)
-
-    items = []
-    ambiguities = []
-    risks = []
-    missing = []
-    summary = ""
-
-    # 1. Try Groq structured feedback extraction if configured
-    if settings.groq_api_key and settings.groq_model:
-        try:
-            extraction = await groq.extract_feedback(data.content)
-            for req in extraction.requests:
-                items.append({
-                    "id": uuid4().hex[:8],
-                    "description": req.description,
-                    "category": req.category,
-                    "classification": req.classification,
-                    "confidence": req.confidence,
-                    "requires_confirmation": req.requires_confirmation,
-                    "client_confirmed": False,
-                    "actionable_cut_note": f"Apply to next cut: {req.description}",
-                })
-            ambiguities = extraction.ambiguities
-            risks = extraction.production_risks
-            missing = extraction.missing_information
-            summary = f"Extracted {len(items)} actionable items from your creative feedback."
-        except Exception as e:
-            log.warning("Groq extraction fallback used for client portal draft: %s", e)
-            items = []
-
-    # 2. Intelligent fallback parser if Groq was not reachable or had no items
-    if not items:
-        raw_lines = [line.strip("- *0123456789. ") for line in data.content.split("\n") if len(line.strip()) > 3]
-        if not raw_lines:
-            raw_lines = [data.content.strip()]
-
-        for idx, line in enumerate(raw_lines[:15]):
-            lower = line.lower()
-            cat = "General"
-            if any(w in lower for w in ["pace", "slow", "fast", "speed", "timing", "cut", "trim", "transition"]):
-                cat = "Pacing & Editing"
-            elif any(w in lower for w in ["color", "grade", "dark", "bright", "lut", "saturation", "tint", "contrast"]):
-                cat = "Color & Grade"
-            elif any(w in lower for w in ["audio", "music", "track", "sound", "voice", "mix", "volume", "dialogue", "sfx"]):
-                cat = "Audio & Sound"
-            elif any(w in lower for w in ["graphic", "title", "font", "lower third", "text", "logo", "caption"]):
-                cat = "Graphics & Titles"
-            elif any(w in lower for w in ["story", "hook", "intro", "outro", "cta", "message", "script", "scene"]):
-                cat = "Story & Structure"
-
-            is_ambiguous = any(
-                w in lower for w in ["maybe", "perhaps", "feel", "pop", "vibe", "punchy", "something like", "better", "not sure"]
-            )
-            items.append({
-                "id": uuid4().hex[:8],
-                "description": line,
-                "category": cat,
-                "classification": "explicit" if not is_ambiguous else "inferred",
-                "confidence": 0.95 if not is_ambiguous else 0.65,
-                "requires_confirmation": is_ambiguous,
-                "client_confirmed": False,
-                "actionable_cut_note": f"Production note: {line}",
-            })
-            if is_ambiguous:
-                ambiguities.append(f"Ambiguity detected in note #{idx+1}: “{line}”. Consider clarifying specific timing or style.")
-
-        summary = f"Structured {len(items)} actionable creative requirements for editor review."
-
-    return {
-        "summary": summary,
-        "requests": items,
-        "ambiguities": ambiguities,
-        "missing_information": missing,
-        "production_risks": risks,
-    }
-
-
-# --- Submit Confirmed / Edited Feedback ---
-
-@app.post("/api/portal/projects/{project_id}/feedback/submit", status_code=201)
-async def submit_portal_feedback(
-    project_id: int,
-    data: PortalFeedbackSubmitInput,
-    db: Session = Depends(get_db),
-    client_identity=Depends(current_client_identity),
-):
-    client, wid = client_identity
-    project = _get_portal_project(db, project_id, client.id, wid)
-
-    structured_json = json.dumps([item.model_dump() for item in data.items])
-
-    submission = ClientFeedbackSubmission(
-        workspace_id=wid,
-        client_id=client.id,
-        project_id=project.id,
-        review_version_id=data.version_id,
-        feedback_type=data.feedback_type,
-        author_name=data.author_name or client.name,
-        content=data.content,
-        structured_data=structured_json,
-        audio_asset_id=data.audio_asset_id,
-        status="submitted",
-    )
-    db.add(submission)
-
-    # Advance project status to in_review if active
-    if project.status == "active":
-        project.status = "in_review"
-
-    if data.version_id:
-        v = db.scalar(
-            select(ReviewVersion).where(
-                ReviewVersion.id == data.version_id,
-                ReviewVersion.project_id == project.id,
-            )
-        )
-        if v:
-            v.status = "changes_requested"
-
-    # Only retain explicitly client-confirmed preferences
-    confirmed_items = [it for it in data.items if it.client_confirmed]
-    for confirmed_item in confirmed_items:
-        mem_key = f"portal-feedback:{uuid4().hex[:12]}"
-        _remember_op(
-            db,
-            workspace_id=wid,
-            client_id=client.id,
-            project_id=project.id,
-            run_id=None,
-            operation="retain",
-            status="completed",
-            key=mem_key,
-            details=f"Client confirmed preference: {confirmed_item.description}",
-            provenance="client_confirmed",
-        )
-
-    db.commit()
-    db.refresh(submission)
-    return _submission_dict(submission)
-
-
-# --- Voice Feedback Audio Upload ---
-
-@app.post("/api/portal/projects/{project_id}/voice", status_code=201)
-async def upload_portal_voice(
-    project_id: int,
-    file: UploadFile = File(...),
-    db: Session = Depends(get_db),
-    client_identity=Depends(current_client_identity),
-):
-    client, wid = client_identity
-    project = _get_portal_project(db, project_id, client.id, wid)
-
-    safe_name = Path(file.filename or "voice_feedback.webm").name[:255]
-    content = await file.read(settings.max_upload_bytes + 1)
-    if not content or len(content) > settings.max_upload_bytes:
-        raise HTTPException(413, "Voice audio file is empty or exceeds the upload size limit")
-
-    content_type = file.content_type or mimetypes.guess_type(safe_name)[0] or "audio/webm"
-    allowed_audio = {
-        "audio/mpeg", "audio/wav", "audio/x-wav", "audio/webm", "audio/ogg",
-        "audio/aac", "audio/mp4", "audio/x-m4a", "video/webm", "application/octet-stream"
-    }
-    if content_type not in allowed_audio:
-        raise HTTPException(415, "Unsupported audio recording format")
-
-    folder = Path(settings.upload_dir).resolve() / str(wid) / str(project.id)
-    folder.mkdir(parents=True, exist_ok=True)
-    storage_key = f"{wid}/{project.id}/{uuid4().hex}"
-    destination = folder / storage_key.split("/")[-1]
-    destination.write_bytes(content)
-
-    # Use first owner user id or dummy for created_by
-    first_member = db.scalar(select(Membership).where(Membership.workspace_id == wid))
-    creator_id = first_member.user_id if first_member else 1
-
-    asset = Asset(
-        workspace_id=wid,
-        client_id=client.id,
-        project_id=project.id,
-        filename=safe_name,
-        category="voice_feedback",
-        content_type=content_type,
-        size_bytes=len(content),
-        storage_key=str(destination),
-        created_by=creator_id,
-    )
-    db.add(asset)
-    db.commit()
-    db.refresh(asset)
-
-    return {
-        "asset_id": asset.id,
-        "filename": asset.filename,
-        "category": asset.category,
-        "size_bytes": asset.size_bytes,
-        "stream_url": f"/api/portal/assets/{asset.id}/stream",
-    }
-
-
-# --- Video Review: Timestamped Comments ---
-
-@app.get("/api/portal/projects/{project_id}/comments")
-def list_portal_comments(
-    project_id: int,
-    db: Session = Depends(get_db),
-    client_identity=Depends(current_client_identity),
-):
-    client, wid = client_identity
-    project = _get_portal_project(db, project_id, client.id, wid)
-    comments = db.scalars(
-        select(VideoComment).where(
-            VideoComment.project_id == project.id,
-            VideoComment.workspace_id == wid,
-        ).order_by(VideoComment.timestamp_seconds.asc())
-    ).all()
-    return [_comment_dict(c) for c in comments]
-
-
-@app.post("/api/portal/projects/{project_id}/comments", status_code=201)
-def add_portal_comment(
-    project_id: int,
-    data: PortalCommentInput,
-    db: Session = Depends(get_db),
-    client_identity=Depends(current_client_identity),
-):
-    client, wid = client_identity
-    project = _get_portal_project(db, project_id, client.id, wid)
-
-    comment = VideoComment(
-        workspace_id=wid,
-        client_id=client.id,
-        project_id=project.id,
-        review_version_id=data.version_id,
-        timestamp_seconds=round(data.timestamp_seconds, 2),
-        timecode=data.timecode.strip(),
-        author_name=data.author_name or client.name,
-        content=data.content.strip(),
-        status="submitted",
-    )
-    db.add(comment)
-    db.commit()
-    db.refresh(comment)
-    return _comment_dict(comment)
-
-
-@app.patch("/api/portal/projects/{project_id}/comments/{comment_id}")
-def update_portal_comment_status(
-    project_id: int,
-    comment_id: int,
-    status: str,
-    db: Session = Depends(get_db),
-    client_identity=Depends(current_client_identity),
-):
-    client, wid = client_identity
-    _get_portal_project(db, project_id, client.id, wid)
-    comment = db.scalar(
-        select(VideoComment).where(
-            VideoComment.id == comment_id,
-            VideoComment.project_id == project_id,
-            VideoComment.workspace_id == wid,
-        )
-    )
-    if not comment:
-        raise HTTPException(404, "Comment not found")
-    if status not in {"submitted", "processing", "resolved"}:
-        raise HTTPException(422, "Invalid comment status")
-    comment.status = status
-    db.commit()
-    return _comment_dict(comment)
-
-
-# --- Client Review Decision (Approve, Request Changes, Reject) ---
-
-@app.post("/api/portal/projects/{project_id}/decision")
-def submit_portal_decision(
-    project_id: int,
-    data: PortalDecisionInput,
-    db: Session = Depends(get_db),
-    client_identity=Depends(current_client_identity),
-):
-    client, wid = client_identity
-    project = _get_portal_project(db, project_id, client.id, wid)
-
-    version = None
-    if data.version_id:
-        version = db.scalar(
-            select(ReviewVersion).where(
-                ReviewVersion.id == data.version_id,
-                ReviewVersion.project_id == project.id,
-            )
-        )
-    if not version:
-        version = _ensure_review_version(db, project)
-
-    decision_map = {
-        "approve": ("approved", "delivered"),
-        "changes_requested": ("changes_requested", "in_review"),
-        "reject": ("rejected", "archived"),
-    }
-    ver_status, proj_status = decision_map[data.decision]
-    version.status = ver_status
-    if data.decision == "approve":
-        project.status = "completed"
-
-    # Record decision submission
-    submission = ClientFeedbackSubmission(
-        workspace_id=wid,
-        client_id=client.id,
-        project_id=project.id,
-        review_version_id=version.id,
-        feedback_type="review_decision",
-        author_name=data.author_name or client.name,
-        content=data.notes.strip() or f"Client marked version as {data.decision}.",
-        structured_data=json.dumps([{"decision": data.decision, "version": version.version_label, "notes": data.notes}]),
-        audio_asset_id=None,
-        status="resolved" if data.decision == "approve" else "submitted",
-        review_decision=data.decision,
-    )
-    db.add(submission)
-    db.commit()
-
-    return {
-        "decision": data.decision,
-        "project_id": project.id,
-        "project_status": project.status,
-        "version_id": version.id,
-        "version_status": version.status,
-        "submission_id": submission.id,
-        "message": f"Version {version.version_label} successfully marked as {data.decision}.",
-    }
-
-
-# --- Client Feedback List & Status Tracking ---
-
-@app.get("/api/portal/projects/{project_id}/feedback")
-def list_portal_feedback(
-    project_id: int,
-    status: str | None = None,
-    db: Session = Depends(get_db),
-    client_identity=Depends(current_client_identity),
-):
-    client, wid = client_identity
-    project = _get_portal_project(db, project_id, client.id, wid)
-    stmt = select(ClientFeedbackSubmission).where(
-        ClientFeedbackSubmission.project_id == project.id,
-        ClientFeedbackSubmission.workspace_id == wid,
-    )
-    if status and status != "all":
-        stmt = stmt.where(ClientFeedbackSubmission.status == status)
-
-    submissions = db.scalars(stmt.order_by(ClientFeedbackSubmission.created_at.desc())).all()
-    return [_submission_dict(s) for s in submissions]
-
-
-# --- Secure Asset Stream for Client ---
-
-@app.get("/api/portal/assets/{asset_id}/stream")
-def stream_portal_asset(
-    asset_id: int,
-    db: Session = Depends(get_db),
-    client_identity=Depends(current_client_identity),
-):
-    client, wid = client_identity
-    asset = db.scalar(
-        select(Asset).where(
-            Asset.id == asset_id,
-            Asset.client_id == client.id,
-            Asset.workspace_id == wid,
-        )
-    )
-    if not asset or not Path(asset.storage_key).is_file():
-        raise HTTPException(404, "Asset not found or not accessible")
-    return FileResponse(asset.storage_key, filename=asset.filename, media_type=asset.content_type)
-
+    return get_production_analytics(db, wid)
