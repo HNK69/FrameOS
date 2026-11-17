@@ -18,12 +18,10 @@ Coverage:
 from __future__ import annotations
 
 from pathlib import Path
-import pytest
-from sqlalchemy import select
 
-from app.main import app
+import pytest
+
 from app.models import Asset, Project
-from . import progressive_check
 
 
 def test_tier1_f10_client_upload_valid_mp4_video_asset(

@@ -8,8 +8,6 @@ Tests:
 5. Guest passcode access is strictly scoped to that guest's client_id and workspace_id.
 """
 
-import json
-from datetime import UTC, datetime
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, select
@@ -27,7 +25,6 @@ from app.models import (
     Membership,
     Project,
     ProjectRequest,
-    Proposal,
     User,
     Workspace,
 )

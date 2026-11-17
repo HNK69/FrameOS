@@ -8,8 +8,16 @@ from sqlalchemy.pool import StaticPool
 from app.config import settings
 from app.db import Base, get_db
 from app.main import app
-from app.models import ExtractedItem, Membership, MemoryOperation, ProcessingRun, User, Workspace
-from app.schemas import ClientInput, ExtractionItem, ExtractionResult, FeedbackInput, ProcessInput, ProjectInput, SynthesisResult
+from app.models import ExtractedItem, Membership, ProcessingRun, User, Workspace
+from app.schemas import (
+    ClientInput,
+    ExtractionItem,
+    ExtractionResult,
+    FeedbackInput,
+    ProcessInput,
+    ProjectInput,
+    SynthesisResult,
+)
 from app.security import hash_password, issue_token
 
 

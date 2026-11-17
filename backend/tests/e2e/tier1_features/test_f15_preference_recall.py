@@ -15,10 +15,15 @@ Coverage:
 
 from __future__ import annotations
 
-import pytest
 from sqlalchemy import select
 
-from app.models import Client, Feedback, MemoryOperation, ProcessingRun, ProductionTask, Project, Transcript
+from app.models import (
+    MemoryOperation,
+    ProcessingRun,
+    ProductionTask,
+    Project,
+    Transcript,
+)
 
 
 def test_tier1_f15_direct_retain_confirmed_client_preference(

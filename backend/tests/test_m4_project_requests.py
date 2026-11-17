@@ -7,8 +7,6 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import sessionmaker
 
 from app.main import app as fastapi_app
-from app.db import get_db
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -70,7 +68,7 @@ class TestClientRequestLifecycle:
         agency_data = _register_agency(client)
         workspace_id = agency_data["workspace_id"]
 
-        client_data = _register_client(client)
+        _register_client(client)
         _login(client, "client1@example.com", "securePass123")
 
         r = client.post("/api/client/requests", json={

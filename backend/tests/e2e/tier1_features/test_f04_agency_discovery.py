@@ -10,15 +10,13 @@ Coverage:
 
 from __future__ import annotations
 
-import json
-from datetime import UTC, datetime
-import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from app.main import app
 from app.models import AgencyProfile, Workspace
 from app.schemas import AgencyDiscoveryItem
+
 from . import progressive_check
 
 

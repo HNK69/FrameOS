@@ -18,12 +18,10 @@ Coverage:
 from __future__ import annotations
 
 from fastapi.testclient import TestClient
-import pytest
 from sqlalchemy import select
 
 from app.main import app
 from app.models import Client, MemoryOperation, Project
-
 
 # ==============================================================================
 # Feature 15: Hindsight Memory Boundaries (Tests 115-119)

@@ -12,7 +12,8 @@ Covers:
 """
 
 import json
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
+
 import pytest
 from pydantic import ValidationError
 from sqlalchemy import create_engine
@@ -32,25 +33,16 @@ from app.models import (
     Workspace,
 )
 from app.schemas import (
-    AgencyDiscoveryItem,
     AgencyProfileResponse,
     AgencyProfileUpdateInput,
     AgencyRegisterInput,
-    AuthResponse,
-    ClientProfileResponse,
-    ClientProfileUpdateInput,
     ClientRegisterInput,
     PortfolioItem,
     ProjectMessageCreateInput,
-    ProjectMessageResponse,
     ProjectRequestCreateInput,
     ProjectRequestResponse,
     ProjectRequestUpdateInput,
-    ProposalActionResponse,
     ProposalCreateInput,
-    ProposalResponse,
-    ProposalUpdateInput,
-    UserResponse,
 )
 
 

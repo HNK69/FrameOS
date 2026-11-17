@@ -35,16 +35,22 @@ from __future__ import annotations
 
 import tempfile
 from pathlib import Path
+
 import pytest
-from pydantic import ValidationError
 from sqlalchemy import select
 
 from app.config import settings
 from app.main import app
-from app.models import Asset, ProcessingRun, Project, ProjectRequest, Proposal, ReviewVersion, VideoComment
-from app.schemas import PortalCommentInput, PortalDecisionInput, PortalDraftInput
-from . import progressive_check
+from app.models import (
+    Asset,
+    ProcessingRun,
+    Project,
+    ProjectRequest,
+    Proposal,
+    VideoComment,
+)
 
+from . import progressive_check
 
 # ==============================================================================
 # Feature 9: Project Transition Boundaries (Tests 81-86)

@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Any
 
 import email_validator
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, TypeAdapter, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 
 class InputModel(BaseModel):

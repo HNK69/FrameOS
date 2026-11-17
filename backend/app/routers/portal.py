@@ -1,13 +1,10 @@
-from datetime import UTC, datetime
 import json
 import logging
-import mimetypes
-import os
-import shutil
+from datetime import UTC
 from pathlib import Path
 from uuid import uuid4
 
-from fastapi import APIRouter, Cookie, Depends, File, Header, HTTPException, Response, UploadFile
+from fastapi import APIRouter, Cookie, Depends, File, HTTPException, Response, UploadFile
 from fastapi.responses import FileResponse
 from fastapi.security import HTTPAuthorizationCredentials
 from sqlalchemy import func, or_, select
@@ -25,7 +22,6 @@ from ..models import (
     Project,
     ProjectRequest,
     ReviewVersion,
-    User,
     VideoComment,
     now_utc,
 )
@@ -40,7 +36,6 @@ from ..security import (
     bearer,
     current_client_identity,
     current_identity,
-    hash_password,
     issue_client_token,
     rate_limit_auth,
     resolve_portal_identity,

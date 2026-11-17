@@ -21,12 +21,12 @@ from app.config import settings
 from app.main import app
 from app.models import Client, Membership, User, Workspace
 from app.security import hash_password, issue_token
+
 from .mocks import (
     MockGroqService,
     MockHindsightService,
     MockOpenClawService,
 )
-
 
 # ==============================================================================
 # External Service Mocks Fixtures

@@ -18,11 +18,12 @@ Coverage:
 from __future__ import annotations
 
 from pathlib import Path
-import pytest
+
 from sqlalchemy import select
 
 from app.main import app
 from app.models import Asset, Client, MemoryOperation, Project, ProjectRequest, Proposal
+
 from . import progressive_check
 
 

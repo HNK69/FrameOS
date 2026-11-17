@@ -1,10 +1,13 @@
-import pytest
 from fastapi.testclient import TestClient
+
+from app.config import settings
 from app.main import app
 from app.security import auth_rate_limiter
 
-def test_rate_limiting_trigger_429():
+
+def test_rate_limiting_trigger_429(monkeypatch):
     """Verify IP sliding window rate limiter protects auth endpoints with HTTP 429."""
+    monkeypatch.setattr(settings, "auth_secret", "rate-limit-test-secret-123456789")
     auth_rate_limiter.reset()
     client = TestClient(app)
 

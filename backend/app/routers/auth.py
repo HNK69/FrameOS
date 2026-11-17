@@ -1,7 +1,6 @@
 """Authentication Router: Client and Agency Registration, Login, Logout, Status, Setup, and Identity."""
 
 from typing import Any
-from uuid import uuid4
 
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Response, status
 from fastapi.security import HTTPAuthorizationCredentials
@@ -10,7 +9,13 @@ from sqlalchemy.orm import Session
 
 from ..config import settings
 from ..db import get_db
-from ..models import AgencyProfile, Client, ClientPortalAccess, ClientProfile, Membership, User, Workspace
+from ..models import (
+    AgencyProfile,
+    ClientProfile,
+    Membership,
+    User,
+    Workspace,
+)
 from ..schemas import (
     AgencyRegisterInput,
     AuthResponse,

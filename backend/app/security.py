@@ -18,7 +18,15 @@ from sqlalchemy.orm import Session
 
 from .config import settings
 from .db import get_db
-from .models import Client, ClientPortalAccess, Membership, Project, ProjectRequest, User, Workspace, now_utc
+from .models import (
+    Client,
+    ClientPortalAccess,
+    Membership,
+    Project,
+    ProjectRequest,
+    User,
+    now_utc,
+)
 
 password_hash = PasswordHash.recommended()
 bearer = HTTPBearer(auto_error=False)

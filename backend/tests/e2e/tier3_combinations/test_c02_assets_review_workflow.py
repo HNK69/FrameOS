@@ -22,14 +22,13 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from fastapi.testclient import TestClient
+
 import jwt
-import pytest
-from sqlalchemy import select
+from fastapi.testclient import TestClient
 
 from app.config import settings
 from app.main import app
-from app.models import Asset, Project, ReviewVersion, VideoComment
+from app.models import Asset, Project, ReviewVersion
 
 
 def test_tier3_c06_active_project_immediate_asset_upload(

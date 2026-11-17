@@ -19,10 +19,11 @@ from __future__ import annotations
 
 import tempfile
 from pathlib import Path
+
 import pytest
 from sqlalchemy import select
 
-from app.models import ExtractedItem, ProcessingRun, Project
+from app.models import ExtractedItem, Project
 from app.schemas import ExtractionResult
 
 

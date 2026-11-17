@@ -18,10 +18,17 @@ Coverage:
 from __future__ import annotations
 
 from datetime import UTC, datetime
-import pytest
+
 from sqlalchemy import select
 
-from app.models import ClientFeedback, Feedback, MemoryOperation, ProcessingRun, ProductionTask, Project, Transcript
+from app.models import (
+    ClientFeedback,
+    Feedback,
+    ProcessingRun,
+    ProductionTask,
+    Project,
+    Transcript,
+)
 
 
 def test_tier3_c10_ai_feedback_task_conversion_human_approval_gate(
@@ -55,7 +62,6 @@ def test_tier3_c10_ai_feedback_task_conversion_human_approval_gate(
         db.add(fb)
         db.commit()
         fb_id = fb.id
-        proj_id = proj.id
 
     # 1. Agency delivers feedback
     resp_deliv = agency_client.post(f"/api/agency/feedback/{fb_id}/deliver")

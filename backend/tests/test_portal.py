@@ -129,8 +129,8 @@ def test_portal_access_generation_and_client_isolation(client_env):
 
 
 def test_portal_ai_structured_draft_and_confirmation(client_env, monkeypatch):
+    from app.schemas import ExtractionItem, ExtractionResult
     from app.services import groq, hindsight
-    from app.schemas import ExtractionResult, ExtractionItem
 
     async def mock_extract(content: str):
         return ExtractionResult(
@@ -295,8 +295,9 @@ def test_security_invalid_passcode_rejected_401(client_env):
 
 def test_security_expired_token_rejected_401(client_env):
     """Ensure expired JWT session tokens and expired access tokens return HTTP 401."""
+    from datetime import UTC, datetime, timedelta
+
     import jwt
-    from datetime import datetime, UTC, timedelta
     
     # 1. Expired JWT
     expired_time = datetime.now(UTC) - timedelta(hours=2)
@@ -317,8 +318,9 @@ def test_security_expired_token_rejected_401(client_env):
     access_res = owner.get(f"/api/clients/{client_env['client_a_id']}/portal-access")
     token_str = access_res.json()["access_token"]
 
-    from app.models import ClientPortalAccess
     from sqlalchemy.orm import Session as OrmSession
+
+    from app.models import ClientPortalAccess
     with OrmSession(client_env["engine"]) as db_session:
         acc = db_session.query(ClientPortalAccess).filter_by(access_token=token_str).first()
         acc.created_at = datetime.now(UTC) - timedelta(days=60)

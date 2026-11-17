@@ -7,8 +7,6 @@ Allows workspace owners/members to preview their unpublished profiles.
 
 from __future__ import annotations
 
-from typing import Any
-
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session

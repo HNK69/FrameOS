@@ -16,7 +16,6 @@ Coverage:
 from __future__ import annotations
 
 from fastapi.testclient import TestClient
-import pytest
 
 from app.main import app
 from app.models import ProcessingRun, ProductionTask, Project, Transcript

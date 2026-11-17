@@ -10,12 +10,12 @@ Coverage:
 
 from __future__ import annotations
 
-import pytest
 from sqlalchemy import select
 
 from app.main import app
 from app.models import ProjectMessage, ProjectRequest
-from app.schemas import ProjectMessageCreateInput, ProjectRequestResponse
+from app.schemas import ProjectMessageCreateInput
+
 from . import progressive_check
 
 

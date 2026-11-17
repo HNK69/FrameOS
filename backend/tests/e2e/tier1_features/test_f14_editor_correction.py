@@ -15,7 +15,6 @@ Coverage:
 
 from __future__ import annotations
 
-import pytest
 from sqlalchemy import select
 
 from app.models import Feedback, MemoryOperation, ProcessingRun, ProductionTask, Project, Transcript

@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -22,7 +22,6 @@ from ..models import (
     Proposal,
     User,
     Workspace,
-    now_utc,
 )
 from ..schemas import (
     ProjectMessageCreateInput,

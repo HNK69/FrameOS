@@ -10,7 +10,6 @@ from __future__ import annotations
 import hashlib
 from collections.abc import Generator
 from pathlib import Path
-from typing import Any
 
 import pytest
 from sqlalchemy import create_engine
@@ -22,6 +21,7 @@ import app.models
 from app.config import settings
 from app.db import Base, get_db
 from app.main import app as fastapi_app
+
 try:
     import app.routers.feedback as feedback_router
 except ImportError:

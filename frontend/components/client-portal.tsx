@@ -130,6 +130,43 @@ export type PortalProject = {
 export function ClientPortal({ initialProjectId }: { initialProjectId?: number }) {
   const [token, setToken] = useState<string>("");
   const [client, setClient] = useState<PortalClient | null>(null);
+  const [marketplaceUser, setMarketplaceUser] = useState<{ id: number; email: string; full_name: string; company_name: string } | null>(null);
+  const [passcodeEntry, setPasscodeEntry] = useState("");
+  const [passcodeSubmitting, setPasscodeSubmitting] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [projects, setProjects] = useState<PortalProject[]>([]);
+  const [selectedProjectId, setSelectedProjectId] = useState<number | null>(initialProjectId || null);
+  const [activeProject, setActiveProject] = useState<PortalProject | null>(null);
+  const [activeTab, setActiveTab] = useState<"review" | "brief" | "voice" | "pipeline" | "assets">("review");
+  const [notice, setNotice] = useState<string>("");
+  const [errorNotice, setErrorNotice] = useState<string>("");
+
+  // Modals
+  const [draftModalOpen, setDraftModalOpen] = useState(false);
+  const [decisionModalOpen, setDecisionModalOpen] = useState<"approve" | "changes_requested" | "reject" | null>(null);
+  const [draftData, setDraftData] = useState<{
+    summary: string;
+    requests: FeedbackItem[];
+    ambiguities: string[];
+    missing_information: string[];
+    production_risks: string[];
+    originalContent: string;
+    feedbackType: string;
+    audioAssetId?: number | null;
+  } | null>(null);
+
+  // Check initial token from URL or localStorage
+  useEffect(() => {
+    const params = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
+    const urlToken = params?.get("token") || params?.get("code") || "";
+    const storedToken = typeof window !== "undefined" ? localStorage.getItem("frameops_portal_token") || "" : "";
+    const effectiveToken = urlToken || storedToken;
+
+    if (effectiveToken) {
+      setToken(effectiveToken);
+      fetchClientData(effectiveToken);
+    } else {
+      // Try cookie-based session
       api<{ client: PortalClient | null; has_engagement?: boolean; authenticated?: boolean; user?: { id: number; email: string; full_name: string; company_name: string } }>("/api/portal/auth/me")
         .then(async (res) => {
           if (res.client) {
@@ -196,6 +233,39 @@ export function ClientPortal({ initialProjectId }: { initialProjectId?: number }
     }
   }
 
+  async function handlePasscodeSubmit(code: string) {
+    if (!code.trim()) return;
+    setPasscodeSubmitting(true);
+    setErrorNotice("");
+    try {
+      const res = await api<any>("/api/portal/auth/login", {
+        ...json("POST", { code: code.trim() }),
+        headers: { "X-Portal-Token": code.trim() },
+      });
+      if (res.token) {
+        localStorage.setItem("frameops_portal_token", res.token);
+        setToken(res.token);
+      }
+      setClient(res.client);
+      setMarketplaceUser(null);
+      await loadProjects(res.token);
+      setNotice("Successfully connected to agency project portal.");
+    } catch (e: any) {
+      setErrorNotice(e.message || "Invalid agency passcode");
+    } finally {
+      setPasscodeSubmitting(false);
+    }
+  }
+
+  async function loadProjects(overrideToken?: string) {
+    const t = overrideToken || token;
+    const headers: Record<string, string> = {};
+    if (t) {
+      headers["X-Portal-Token"] = t;
+      headers["Authorization"] = `Bearer ${t}`;
+    }
+    try {
+      const projs = await api<PortalProject[]>("/api/portal/projects", { headers });
       setProjects(projs || []);
       if (projs && projs.length > 0) {
         const match = selectedProjectId ? projs.find((p) => p.id === selectedProjectId) : projs[0];
@@ -241,6 +311,22 @@ export function ClientPortal({ initialProjectId }: { initialProjectId?: number }
     localStorage.removeItem("frameops_portal_token");
     setToken("");
     setClient(null);
+    setMarketplaceUser(null);
+    setActiveProject(null);
+    setProjects([]);
+  }
+
+  if (loading) {
+    return (
+      <main className="portal-container">
+        <div className="portal-loading">
+          <div className="portal-spinner" />
+          <span>Accessing FRAMEOPS Secure Client Portal…</span>
+        </div>
+      </main>
+    );
+  }
+
   if (marketplaceUser && !client) {
     return (
       <div className="portal-shell">
@@ -752,6 +838,7 @@ function PortalAuthGate({ onSuccess }: { onSuccess: (token: string, client: Port
             ← Return to Client Dashboard
           </Link>
         </div>
+
         <div className="portal-auth-footer">
           <Shield size={14} />
           <span>Strict client-level data isolation. Project assets and feedback are private to your organization.</span>

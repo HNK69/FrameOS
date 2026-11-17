@@ -10,25 +10,20 @@ Tests all 7 audit remediation items:
 7. Security headers (CSP, Permissions-Policy, HSTS).
 """
 
-import io
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.main import app
-from app.models import Client, Membership, User, Workspace
+from app.models import Membership, User, Workspace
 from app.security import (
     _extract_client_ip,
     auth_rate_limiter,
     hash_password,
     issue_client_session_token,
-    issue_client_token,
     issue_user_token,
-    token_revocation_store,
     validate_upload_security,
 )
-
 
 # ==============================================================================
 # 1 & 6. RATE LIMITING & SLIDING WINDOW

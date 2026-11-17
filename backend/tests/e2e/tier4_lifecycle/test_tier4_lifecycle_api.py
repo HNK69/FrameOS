@@ -25,10 +25,8 @@ Strict Database Invariant:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from datetime import UTC, datetime
 import secrets
-from typing import Any
+from dataclasses import dataclass, field
 
 import pytest
 from fastapi.testclient import TestClient
@@ -36,34 +34,25 @@ from sqlalchemy import select
 
 from app.main import app
 from app.models import (
-    Asset,
     Client,
     ClientFeedback,
-    ClientPortalAccess,
-    ClientProfile,
-    Feedback,
     Membership,
     MemoryOperation,
     ProcessingRun,
-    ProductionTask,
     Project,
-    ProjectMessage,
     ProjectRequest,
     Proposal,
-    ReviewVersion,
     User,
-    VideoComment,
     Workspace,
     now_utc,
 )
-from app.routers.portal import _ensure_portal_access, _ensure_review_version
-from app.schemas import ProposalActionResponse
+from app.routers.portal import _ensure_portal_access
 from app.security import (
     hash_password,
     issue_client_session_token,
-    issue_client_token,
     issue_token,
 )
+
 from . import progressive_check
 
 

@@ -10,15 +10,14 @@ Coverage:
 
 from __future__ import annotations
 
-import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
-from sqlalchemy.orm import Session
 
 from app.main import app
 from app.models import AgencyProfile, Membership, User, Workspace
 from app.schemas import AgencyRegisterInput
 from app.security import hash_password
+
 from . import progressive_check
 
 

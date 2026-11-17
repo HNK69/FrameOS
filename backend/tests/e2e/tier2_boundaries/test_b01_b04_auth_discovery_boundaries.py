@@ -29,8 +29,8 @@ Coverage:
 
 from __future__ import annotations
 
-import json
 from datetime import UTC, datetime, timedelta
+
 import jwt
 import pytest
 from fastapi.testclient import TestClient
@@ -40,11 +40,11 @@ from sqlalchemy.exc import IntegrityError
 
 from app.config import settings
 from app.main import app
-from app.models import AgencyProfile, ClientProfile, Membership, User, Workspace
-from app.schemas import AgencyProfileUpdateInput, AgencyRegisterInput, ClientRegisterInput
+from app.models import AgencyProfile, Membership, User, Workspace
+from app.schemas import AgencyRegisterInput, ClientRegisterInput
 from app.security import hash_password
-from . import progressive_check
 
+from . import progressive_check
 
 # ==============================================================================
 # Feature 1: Client Auth Boundaries (Tests 21-25)

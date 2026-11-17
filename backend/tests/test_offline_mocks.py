@@ -11,13 +11,12 @@ from __future__ import annotations
 
 import hashlib
 from pathlib import Path
-from typing import Any
 
 import pytest
 from sqlalchemy import select
 
 import app.db
-from app.models import Client, User, Workspace
+from app.models import User, Workspace
 from app.schemas import ExtractionResult, SynthesisResult
 from app.services.groq import ServiceUnavailable
 from tests.e2e.mocks import (
@@ -26,7 +25,6 @@ from tests.e2e.mocks import (
     MockOpenClawService,
     verify_resolve_workflow,
 )
-
 
 pytest_plugins = ["tests.e2e.conftest"]
 

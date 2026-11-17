@@ -41,8 +41,8 @@ from app.schemas import (
     ProjectRequestCreateInput,
     ProposalCreateInput,
 )
-from . import progressive_check
 
+from . import progressive_check
 
 # ==============================================================================
 # Feature 5: Structured Briefs Boundaries (Tests 61-65)

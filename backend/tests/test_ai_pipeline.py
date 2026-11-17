@@ -1,14 +1,14 @@
-import pytest
-from app.services.groq import chunk_transcript_tokens
-from app.models import Client, ClientFeedback, ProductionTask, User, Workspace
-from app.security import hash_password, issue_token
-from app.db import Base, get_db
-from app.main import app
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
+
 from app.config import settings
+from app.db import Base, get_db
+from app.main import app
+from app.models import Client, ClientFeedback, ProductionTask, User, Workspace
+from app.security import hash_password, issue_token
+from app.services.groq import chunk_transcript_tokens
 
 
 def test_chunk_transcript_tokens_short_text():

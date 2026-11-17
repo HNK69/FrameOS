@@ -16,7 +16,7 @@ Coverage:
 from __future__ import annotations
 
 from datetime import UTC, datetime
-import pytest
+
 from sqlalchemy import select
 
 from app.models import ClientFeedback, ProcessingRun, ProductionTask, Project, Transcript

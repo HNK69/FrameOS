@@ -1,13 +1,11 @@
-import json
 import logging
-import mimetypes
 import os
 import shutil
 from contextlib import asynccontextmanager
 from pathlib import Path
 from uuid import uuid4
 
-from fastapi import Depends, FastAPI, File, Header, HTTPException, Response, UploadFile
+from fastapi import Depends, FastAPI, File, Header, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from sqlalchemy import select, text
@@ -18,20 +16,13 @@ from .db import get_db
 from .models import (
     Asset,
     Client,
-    ClientFeedbackSubmission,
-    ClientPortalAccess,
     ExtractedItem,
     Feedback,
-    Membership,
     MemoryOperation,
     ProcessingRun,
     ProductionTask,
     Project,
-    ReviewVersion,
     Transcript,
-    User,
-    VideoComment,
-    Workspace,
     now_utc,
 )
 from .routers.agency_profile import router as agency_profile_router

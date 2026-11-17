@@ -20,12 +20,19 @@ Coverage:
 
 from __future__ import annotations
 
-import pytest
 from sqlalchemy import select
 
 from app.main import app
-from app.models import AgencyProfile, Client, Project, ProjectMessage, ProjectRequest, Proposal, Workspace
+from app.models import (
+    AgencyProfile,
+    Project,
+    ProjectMessage,
+    ProjectRequest,
+    Proposal,
+    Workspace,
+)
 from app.schemas import ProposalActionResponse
+
 from . import progressive_check
 
 
@@ -55,7 +62,7 @@ def test_tier3_c01_unpublished_agency_discovery_and_brief_blocked(
             assert p.is_published is False
 
     # 1. Discovery catalog query
-    resp_disc = client_user_client.get(f"/api/discovery/agencies?query=Stealth")
+    resp_disc = client_user_client.get("/api/discovery/agencies?query=Stealth")
     progressive_check(app, resp_disc, "/api/discovery/agencies", _fallback_discovery)
     assert resp_disc.status_code == 200
     results = resp_disc.json()

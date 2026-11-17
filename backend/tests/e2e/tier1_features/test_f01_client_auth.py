@@ -14,14 +14,14 @@ import jwt
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
-from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.main import app
 from app.models import ClientProfile, User
 from app.schemas import ClientRegisterInput
 from app.security import hash_password, verify_password
-from . import is_route_mounted, progressive_check
+
+from . import progressive_check
 
 
 def test_tier1_f1_client_register_success(isolated_db):
