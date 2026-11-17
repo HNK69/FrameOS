@@ -93,3 +93,45 @@ async def ensure_bank(bank_id: str) -> dict:
             "reflect_mission": "Identify applicable client creative preferences, preserve conflicting history, and distinguish confirmed decisions from interpretations."
         }
     })
+
+
+def get_hindsight_cohere_client():
+    """Return a Cohere client configured for Hindsight inference, or None if unconfigured."""
+    if not settings.hindsight_api_token:
+        return None
+    try:
+        import cohere
+        base_url = (settings.hindsight_api_url or "https://inference.hindsight.vectorize.io").rstrip("/")
+        if base_url.endswith("/v1"):
+            base_url = base_url[:-3]
+        return cohere.Client(
+            api_key=settings.hindsight_api_token,
+            base_url=base_url,
+        )
+    except Exception:
+        return None
+
+
+def rerank_preferences(query: str, documents: list[str], model: str | None = None) -> list[dict]:
+    """Rerank candidate client preferences or decisions using Hindsight's hs-decide model."""
+    co = get_hindsight_cohere_client()
+    if not co:
+        raise ServiceUnavailable("Hindsight is not configured. Set HINDSIGHT_API_TOKEN.")
+    target_model = model or settings.hindsight_rerank_model or "hs-decide-1-flash"
+    try:
+        response = co.rerank(
+            model=target_model,
+            query=query,
+            documents=documents,
+        )
+        return [
+            {
+                "index": item.index,
+                "relevance_score": getattr(item, "relevance_score", 0.0),
+                "document": documents[item.index] if item.index < len(documents) else "",
+            }
+            for item in response.results
+        ]
+    except Exception as exc:
+        raise ServiceUnavailable(f"Hindsight rerank request failed: {exc}") from exc
+

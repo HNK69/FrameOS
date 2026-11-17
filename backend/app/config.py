@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     groq_base_url: str = "https://api.groq.com/openai/v1"
     hindsight_api_url: str = ""
     hindsight_api_token: str = ""
+    hindsight_rerank_model: str = "hs-decide-1-flash"
     openclaw_gateway_url: str = ""
     openclaw_auth_token: str = ""
     openclaw_agent_id: str = "main"
