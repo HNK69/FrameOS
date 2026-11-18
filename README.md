@@ -1,209 +1,627 @@
 # FRAMEOPS
 
-**Remember Every Client. Perfect Every Project.**
+**Client-to-agency video production operations, with AI-assisted feedback intelligence.**
 
-FRAMEOPS is a two-sided video production operations platform connecting clients and video-editing agencies. It provides two distinct, fully functional experiences:
+[![License](https://img.shields.io/badge/license-not_declared-lightgrey)](#license)
+[![Backend](https://img.shields.io/badge/backend-FastAPI-009688?logo=fastapi&logoColor=white)](backend/)
+[![Frontend](https://img.shields.io/badge/frontend-Next.js_15-000000?logo=nextdotjs&logoColor=white)](frontend/)
+[![Database](https://img.shields.io/badge/database-SQLite%20%7C%20PostgreSQL-336791?logo=postgresql&logoColor=white)](#database-and-data-flow)
+[![Python](https://img.shields.io/badge/python-3.12-3776AB?logo=python&logoColor=white)](backend/pyproject.toml)
+[![TypeScript](https://img.shields.io/badge/typescript-5.9-3178C6?logo=typescript&logoColor=white)](frontend/package.json)
 
-1. **Client Platform**: Where clients register, discover agencies in a public catalog, submit structured project briefs, upload media assets, communicate with agencies, review proposals, track production, and approve deliverables.
-2. **Agency Platform**: Where agencies register, manage public profiles and portfolios, receive project requests, submit proposals, track clients, process feedback with AI, and manage production workflows.
+FRAMEOPS is a full-stack, two-sided platform for video production agencies and their clients. It combines agency discovery, project briefs, proposals, accepted-project operations, asset management, timestamped review, feedback extraction, production task synthesis, and client-specific preference memory in one application.
 
----
+The repository is maintained at [HNK69/FrameOS](https://github.com/HNK69/FrameOS).
 
-## Architecture & Product Capabilities
-
-### 1. Two-Sided Authentication & Role-Aware RBAC
-- **Independent Registration**: Dedicated registration flows for clients (`POST /api/auth/register/client`) and agencies (`POST /api/auth/register/agency`).
-- **Role-Aware Sessions**: Single login endpoint (`POST /api/auth/login`) dynamically issues persona tokens (`role="client"` or `role="agency_owner"` / `role="agency_member"`).
-- **Argon2id Password Security**: Password hashing via Argon2id (`pwdlib`) with secure HTTP-only cookies (`frameops_client_session` and `frameops_session`).
-
-### 2. Agency Discovery & Profile Catalog
-- **Public Catalog**: `GET /api/discovery/agencies` allows clients to search, filter by specialization and services, and browse agency portfolios.
-- **Publishing Safeguards**: Agencies must complete minimum requirements (description, contact email, at least one specialization and service) before publishing (`POST /api/agency/profile/publish`).
-- **Unpublished Isolation**: Unpublished agencies are strictly hidden from public discovery and return 404 to non-members.
-
-### 3. Project Briefs, Requests & Proposals
-- **Structured Project Briefs**: Clients submit detailed briefs (`POST /api/client/requests`) with target platform, aspect ratio, duration, budget, deadlines, and editing instructions.
-- **Agency Inbox & Review**: Agencies receive briefs in their inbox (`GET /api/agency/requests`), with client drafts automatically hidden.
-- **Proposals & Turnaround**: Agencies submit custom proposals (`POST /api/agency/requests/{id}/proposals`) with scope, turnaround days, and deliverables summary.
-- **Proposal Acceptance & Project Activation**: When a client accepts a proposal (`POST /api/client/requests/{id}/proposals/{id}/accept`), other proposals are declined and an active production project is automatically created in the agency workspace.
-- **Direct Messaging**: Chronological clarification thread (`/api/requests/{id}/messages`) between client and agency.
-
-### 4. Video Production Operations & Adaptive Memory
-- **Dedicated Memory Banks**: Isolated Hindsight memory bank for each client.
-- **AI Feedback Extraction**: Groq Whisper and LLM extraction turning feedback into structured requests.
-- **DaVinci Resolve Task Synthesis**: OpenClaw gateway generating actionable editing instructions.
-- **Review Portal**: Video playback with timestamped comments, versioning, and client decisions.
+> **Implementation note:** Core two-sided workflows and the client review portal are implemented. Groq, Hindsight, and OpenClaw integrations are code-backed, configuration-dependent integrations and may degrade gracefully when credentials or services are unavailable. DaVinci Resolve is a downstream synthesis target, not a directly controlled editing environment.
 
 ---
 
-## Current Implementation & Completed Milestones
+## Table of Contents
 
-### Milestone 1: Database & Concurrency Hardening
-- **SQLite WAL Mode & Busy Timeout**: Configured SQLite Write-Ahead Logging (`PRAGMA journal_mode=WAL`) and a 5,000ms busy timeout (`PRAGMA busy_timeout=5000`) in `backend/app/db.py` to prevent database locking during concurrent API requests.
-- **Linear Alembic Schema**: Migrated active database to `a1b2c3d4e5f6` (`client_portal_schema`), descending from `a891c354b0f2` (`client_feedback_pipeline`) and `05cc8ac7f846` (`initial_schema`).
-- **Data Preservation**: All 144 pre-existing operational records preserved intact across all core tables (`users`, `workspaces`, `clients`, `projects`, `transcripts`, `processing_runs`, `extracted_items`, `memory_operations`).
-- **Safe Backup Protocol**: Timestamped snapshot verified and preserved at `backend/frameops.db.backup_20261115_003535` and `backend/frameops.db.safe_backup`.
-
-### Milestone 2: Security & Authentication Remediation
-- **Elimination of Passwordless Login Bypass**: Completely removed the insecure email-only authentication bypass in `backend/app/routers/portal.py`. All portal logins strictly require a valid passcode or access token; submitting an email alone returns `HTTP 401 Unauthorized`.
-- **Argon2 Passcode Hashing**: Integrated cryptographic passcode verification using Argon2 (`verify_password`) and enforce timezone-aware UTC token expiration (`expires_at`).
-- **Client Identity Hardening**: Removed plaintext passcode comparison in `backend/app/security.py:current_client_identity`; strictly requires valid signed JWTs or active unexpired access tokens.
-- **HTTP Security Headers Middleware**: Added global middleware setting `X-Content-Type-Options: nosniff`, `X-Frame-Options: SAMEORIGIN`, and `Referrer-Policy: strict-origin-when-cross-origin`.
-- **CORS Hardening**: Explicitly enabled `"X-Portal-Token"` in `CORSMiddleware.allow_headers`.
-- **Safe Attachment Downloads**: Configured `Content-Disposition: attachment; filename="{safe_filename}"` and `X-Content-Type-Options: nosniff` in `download_asset` to mitigate SVG stored XSS.
-
-### Milestone 3: AI Pipeline Resiliency & Memory Sync
-- **Groq Transcription 429 Exponential Backoff**: Wrapped `groq.transcribe_audio` in a 4-attempt exponential backoff retry loop (2s, 4s, 6s) matching `extract_feedback` to gracefully handle on-demand 8K TPM rate limits.
-- **Token-Aware Sliding-Window Chunker**: Implemented `chunk_transcript_tokens(text, max_tokens=4000, overlap_tokens=200)` in `backend/app/services/groq.py`. Transcripts exceeding 4,000 tokens (~16,000 characters) are chunked along natural sentence/paragraph boundaries with overlap, extracting requirements per chunk and merging/deduplicating them.
-- **Hindsight Graceful Degradation Fallback**: Wrapped `hindsight.recall` in `process_transcript` with exception handling. If Hindsight Cloud is unreachable or times out, the pipeline records `MemoryOperation(status="degraded")` and proceeds with empty historical memories (`[]`), allowing OpenClaw DaVinci task synthesis to succeed without failing the user run.
-- **Client Preference Memory Sync**: Wired client-confirmed feedback submissions in `submit_portal_feedback` to call `hindsight.retain_and_verify` against the client's tenant memory bank.
-
-### Milestone 4: Client Review Portal Full-Stack Integration
-- **Client Review Portal UI**: Integrated complete client review surfaces (`frontend/app/portal/page.tsx` and `frontend/app/portal/projects/[id]/page.tsx`) with 284 lines of ported styling isolated under `.portal-*` selectors in `frontend/app/globals.css`.
-- **Interactive Review Features**: Video player with timestamped feedback pins, comment threads, review versions, and client approval/change-request decisions.
-- **Navigation Integration**: Added Client Portal links and `"in_review"` project status badge directly into `frontend/components/app-shell.tsx`.
-- **Dynamic Port Architecture**: Frontend configured to use dynamic backend ports (defaulting to port `8001`), supporting Next.js API `rewrites()` in `frontend/next.config.ts` mapping `/api/:path*` to `process.env.BACKEND_URL || "http://localhost:8001/api/:path*"`.
-
-### Milestone 5: Feedback-to-Production Workflow & Workspace Hydration
-- **Explicit Editor Task Conversion**: Added `POST /api/agency/feedback/{feedback_id}/convert-task` in `backend/app/routers/feedback.py`, allowing agency editors to explicitly convert delivered client feedback into production tasks with `source="client_feedback"` and explicit provenance.
-- **Idempotency Enforcement**: Query-based idempotency checks prevent duplicate task generation on repeated clicks, safely returning `already_converted: True` with the existing task.
-- **Workspace Hydration Fix**: Fixed `ProductionWorkspace` hydration bug on page revisit by invoking `restoreProductionProject(projectData)` and updating the `useEffect` dependency array (`[projectId, refresh]`). Added interactive "Delivered Client Feedback" banner with direct conversion actions.
-
-### Milestone 6: Multi-Tier Verification & Pre-Push Synchronization
-- **Layer A Automated Verification**: All 35 backend pytest tests pass; all 2 frontend unit tests pass; Next.js production build compiles with 0 errors across all 8 static and dynamic routes.
-- **Layer B Live Provider Verification**: Groq Cloud API, Hindsight Cloud Memory Layer, and local OpenClaw Gateway daemon verified operational with live credentials and socket checks.
-- **Git Branch Invariants & Checkpoint 2**: Local `main` is ahead of `origin/main` by clean commits with zero remote divergence (`git rev-list --count main..origin/main == 0`). All teammate branches (`origin/Deekshith`, `origin/feature/feedback-intelligence`, `origin/feature/production-intelligence`, `branch-*`) and backup branches (`backup/*`) preserved intact. Awaiting explicit user push sign-off.
+- [Why FRAMEOPS](#why-frameops)
+- [Project Objectives](#project-objectives)
+- [Key Capabilities](#key-capabilities)
+- [Implemented Lifecycle](#implemented-lifecycle)
+- [System Architecture](#system-architecture)
+- [Technology Stack](#technology-stack)
+- [AI and Production Intelligence](#ai-and-production-intelligence)
+- [Database and Data Flow](#database-and-data-flow)
+- [Security](#security)
+- [API Overview](#api-overview)
+- [Project Structure](#project-structure)
+- [Prerequisites](#prerequisites)
+- [Local Setup](#local-setup)
+- [Docker Compose](#docker-compose)
+- [Environment Variables](#environment-variables)
+- [Testing](#testing)
+- [Current Status](#current-status)
+- [Roadmap](#roadmap)
+- [Contributing](#contributing)
+- [License](#license)
 
 ---
+
+## Why FRAMEOPS
+
+Video production collaboration is often split across email threads, file-sharing links, chat applications, spreadsheets, and subjective feedback. Critical context can be lost between the client, agency, editor, and final review.
+
+FRAMEOPS organizes that lifecycle around a shared operational record:
+
+1. Agencies publish profiles and receive structured briefs.
+2. Clients discover agencies and compare proposals.
+3. An accepted proposal creates an active project.
+4. Assets, runs, tasks, feedback, comments, and decisions remain associated with the project.
+5. AI services help extract requirements, recall client preferences, and synthesize editing guidance.
+6. Confirmed feedback can be retained in client-specific memory for future recommendations.
+
+The result is a single application for commercial handoff, production tracking, and client review rather than a collection of disconnected tools.
+
+## Project Objectives
+
+- Provide separate, role-aware experiences for clients and agency teams.
+- Support a complete brief-to-acceptance lifecycle.
+- Keep agency and client data scoped to the appropriate workspace or user.
+- Preserve source evidence and human confirmation in AI-assisted workflows.
+- Separate transient extraction, actionable tasks, editor feedback, and permanent client preferences.
+- Provide timestamped video review and explicit approve/change-request decisions.
+- Make external AI providers optional and isolate provider failures from core database operations.
+- Support SQLite for local development and PostgreSQL for containerized/shared deployments.
+
+## Key Capabilities
+
+### Client
+
+- Register and log in with a client persona.
+- Manage a client profile and company details.
+- Browse published agency profiles and filter by specialization, service, or category.
+- Inspect agency portfolios and contact details.
+- Create, update, list, and review project briefs.
+- Submit briefs as drafts or completed submissions.
+- View and compare agency proposals.
+- Accept or decline proposals.
+- Provide project assets and reference links.
+- Use a project review portal with video playback and timestamped comments.
+- Approve a delivery or request changes.
+- Submit text or audio feedback and confirm extracted requirements.
+
+### Agency
+
+- Register an agency workspace and authenticate with an agency persona.
+- Build and publish an agency profile.
+- Showcase portfolio items, specializations, and services.
+- Receive and filter client project requests.
+- Review briefs and submit proposals.
+- Communicate with clients through request and project message threads.
+- Create and activate projects from accepted proposals.
+- Upload production assets.
+- Review client feedback and audio submissions.
+- Convert delivered feedback into production tasks.
+- Manage task status and editor corrections.
+- View operational analytics and asset-intelligence correlations.
+
+## Implemented Lifecycle
+
+```mermaid
+flowchart LR
+    C[Client registration] --> D[Agency discovery]
+    D --> B[Structured project brief]
+    B --> I[Agency inbox review]
+    I --> P[Agency proposal]
+    P --> A{Client decision}
+    A -->|Decline| P
+    A -->|Accept| W[Active project created]
+    W --> AS[Asset submission]
+    AS --> PR[Production and review version]
+    PR --> FB[Timestamped feedback]
+    FB --> AI[Groq extraction]
+    AI --> CO[Human confirmation]
+    CO --> TC[Production task]
+    TC --> RV[Revision]
+    RV --> AP{Client decision}
+    AP -->|Changes requested| FB
+    AP -->|Approved| DONE[Project complete]
+```
+
+The implementation covers project requests, proposal acceptance, project activation, comments, review decisions, feedback extraction, and production-task conversion. Final project completion is represented through project/review status data; the repository does not describe an external delivery or billing pipeline.
+
+---
+
+## System Architecture
+
+```mermaid
+flowchart TB
+    subgraph Users["FRAMEOPS interfaces"]
+        CL["Client interface<br/>Discovery · Briefs · Review portal"]
+        AG["Agency interface<br/>Profile · Inbox · Proposals · Workspace"]
+    end
+
+    subgraph FE["Frontend"]
+        NX["Next.js 15 / React 19<br/>App Router · TypeScript<br/>TanStack Query · Tailwind CSS"]
+    end
+
+    subgraph API["Backend API"]
+        FA["FastAPI / Uvicorn"]
+        AU["Auth & RBAC<br/>JWT cookies · Argon2"]
+        RT["Routers<br/>Discovery · Requests · Feedback<br/>Portal · Production · Agency"]
+        SV["Services<br/>Groq · Hindsight · OpenClaw<br/>Asset & analytics services"]
+    end
+
+    subgraph Data["Persistence"]
+        DB[("SQLite or PostgreSQL<br/>SQLAlchemy · Alembic")]
+        FS[("Local upload storage<br/>Workspace/project scoped")]
+    end
+
+    subgraph AI["Production intelligence"]
+        GQ["Groq<br/>Whisper transcription · Structured extraction"]
+        HM["Hindsight<br/>Client-specific memory banks"]
+        OC["OpenClaw agentic CLI/gateway"]
+        DV["DaVinci Resolve<br/>Downstream editing environment"]
+    end
+
+    CL --> NX
+    AG --> NX
+    NX -->|"REST / JSON / multipart"| FA
+    NX -->|"Next.js /api rewrite"| FA
+    FA --> AU
+    FA --> RT
+    RT --> SV
+    RT --> DB
+    RT --> FS
+    SV --> GQ
+    SV --> HM
+    SV --> OC
+    OC -->|"Synthesized Resolve task guidance"| DV
+
+    style CL fill:#171717,stroke:#9bf6ff,color:#ffffff
+    style AG fill:#171717,stroke:#f9a8d4,color:#ffffff
+    style NX fill:#111827,stroke:#60a5fa,color:#ffffff
+    style FA fill:#111827,stroke:#34d399,color:#ffffff
+    style DB fill:#1f2937,stroke:#facc15,color:#ffffff
+    style GQ fill:#1f2937,stroke:#fb923c,color:#ffffff
+    style HM fill:#1f2937,stroke:#a78bfa,color:#ffffff
+    style OC fill:#1f2937,stroke:#2dd4bf,color:#ffffff
+    style DV fill:#1f2937,stroke:#f87171,color:#ffffff
+```
+
+### Request and data boundaries
+
+- The Next.js application serves the client, agency, portal, and production interfaces.
+- In local development, browser/API calls are proxied by Next.js rewrites to `BACKEND_URL`, defaulting to `http://localhost:8001`.
+- FastAPI exposes REST endpoints under `/api`.
+- Agency workspace APIs resolve the workspace through role and membership data.
+- Public discovery only exposes published agency profiles.
+- Project, asset, feedback, task, comment, and memory operations are scoped to a workspace or authenticated client identity.
+- SQLAlchemy uses SQLite WAL mode and a busy timeout for local SQLite; PostgreSQL is selectable through `DATABASE_URL`.
+- Uploads are stored on a local filesystem volume/directory and referenced from the database.
+
+## Technology Stack
+
+| Layer | Actual repository technology |
+|---|---|
+| Frontend framework | Next.js 15.5, React 19.1 |
+| UI and forms | TypeScript 5.9, Tailwind CSS 4, Framer Motion, Lucide React |
+| Client state | TanStack React Query 5 |
+| Form/validation | React Hook Form 7, Zod 4, `@hookform/resolvers` |
+| Charts | Recharts 2 |
+| Backend framework | FastAPI, Uvicorn |
+| API validation | Pydantic, Pydantic Settings |
+| Database | SQLAlchemy 2, Alembic, SQLite local default, PostgreSQL 16 via Docker |
+| Authentication | PyJWT, pwdlib with Argon2, HTTP-only persona cookies |
+| HTTP and multipart | HTTPX, python-multipart |
+| Testing | pytest, pytest-asyncio, Node `node:test` |
+| Code quality | Ruff |
+| Package/runtime tools | uv, npm, Docker/Docker Compose |
+| AI transcription/extraction | Groq OpenAI-compatible API |
+| Persistent memory | Hindsight HTTP API |
+| Agent orchestration | OpenClaw CLI/gateway |
+| Intended downstream editor | DaVinci Resolve task guidance |
+
+### Technology badges
+
+![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)
+![Next.js](https://img.shields.io/badge/Next.js-000000?logo=nextdotjs&logoColor=white)
+![React](https://img.shields.io/badge/React-61DAFB?logo=react&logoColor=000000)
+![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)
+![TailwindCSS](https://img.shields.io/badge/Tailwind_CSS-06B6D4?logo=tailwindcss&logoColor=white)
+![Python](https://img.shields.io/badge/Python-3776AB?logo=python&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?logo=postgresql&logoColor=white)
+![SQLite](https://img.shields.io/badge/SQLite-003B57?logo=sqlite&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white)
+
+Technology badges identify implementations discovered in the repository; they do not imply commercial endorsements or partnerships.
+
+## AI and Production Intelligence
+
+### Implemented pipeline behavior
+
+1. **Groq transcription**
+   - Feedback text and audio are accepted through the feedback API.
+   - Audio is transcribed with Groq's `whisper-large-v3-turbo` model.
+   - Text extraction uses the configured Groq chat model and JSON schema.
+   - Long text is split with a character-based approximation of 4,000 tokens and 200-token overlap.
+   - Groq calls include HTTP 429 retry handling.
+
+2. **Hindsight memory**
+   - Each operational client can be mapped to a dedicated Hindsight bank ID.
+   - Bank IDs are generated by the application and persisted with the client.
+   - Recall and retain operations record memory provenance and status in SQLAlchemy models.
+   - Retention verifies the selected document by recalling and matching it against source text.
+   - Failed recall can degrade to an empty memory set rather than abort synthesis.
+
+3. **Human confirmation**
+   - Extracted items carry classifications and confirmation requirements.
+   - Confirmed feedback is the boundary between extraction and retained client memory.
+   - The portal submit flow passes confirmed information into client-specific memory retention.
+   - AI output is not silently promoted to permanent memory or assumed to be editor instruction.
+
+4. **OpenClaw synthesis**
+   - OpenClaw receives extraction output, recalled evidence, and asset availability.
+   - The service requests a concise DaVinci Resolve-oriented task as structured JSON.
+   - Ambiguous or low-confidence work is marked as requiring confirmation.
+   - Provider/process failures are recorded as service failures rather than fabricated successful tasks.
+
+5. **DaVinci Resolve**
+   - DaVinci Resolve is represented as the intended downstream environment.
+   - The repository synthesizes task instructions and workflows; it does **not** control Resolve, load timelines, render projects, or execute editing operations directly.
+
+### Provider status boundary
+
+The `/api/ready` endpoint reports provider configuration state, database readiness, and whether required configuration appears available. It does not replace credential verification or prove an external provider remains reachable. Provider behavior should be considered:
+
+- **Groq:** implemented when API key and model are configured.
+- **Hindsight:** implemented when URL/token are configured, with degradation when unavailable.
+- **OpenClaw:** implemented through CLI/gateway invocation when executable and gateway configuration are available.
+- **DaVinci Resolve:** downstream target/planned integration; direct automation is not implemented.
+
+## Database and Data Flow
+
+### Core models
+
+- `users`, `memberships`, `workspaces`
+- `agency_profiles`, `client_profiles`
+- `project_requests`, `proposals`, `project_messages`
+- `clients`, `projects`, `assets`
+- `transcripts`, `processing_runs`, `extracted_items`
+- `production_tasks`, `feedback`
+- `client_feedback`, `memory_operations`
+- `client_portal_access`, `review_versions`, `video_comments`, `client_feedback_submissions`
+
+### Migration chain
+
+Alembic migrations are linear:
+
+```text
+05cc8ac7f846
+  -> a891c354b0f2
+  -> a1b2c3d4e5f6
+  -> b2c3d4e5f6a7
+```
+
+The latest migration adds agency profiles, client profiles, project requests, proposals, and project messages.
+
+### Data flow
+
+```mermaid
+flowchart LR
+    IN["Brief / asset / voice / comment"] --> SQL["SQLAlchemy persistence"]
+    SQL --> EX["Groq extraction or transcription"]
+    EX --> CF["Client confirmation"]
+    CF -->|"Confirmed preference"| HM["Hindsight client bank"]
+    EX --> OC["OpenClaw synthesis"]
+    HM --> OC
+    SQL --> OC
+    OC --> TASK["Production task + provenance"]
+    TASK --> SQL
+    SQL --> UI["Agency and client interfaces"]
+```
+
+The operational database remains the source of truth for records and provenance. Hindsight is memory-oriented supplementary state, while Groq and OpenClaw results are persisted or represented with error/status data.
+
+## Security
+
+The repository implements:
+
+- Argon2 password/passcode hashing through `pwdlib`.
+- Separate `frameops_session` and `frameops_client_session` HTTP-only cookies.
+- JWT bearer/cookie authentication and server-side logout revocation.
+- Role-aware client/agency authorization guards.
+- Workspace scoping for agency resources.
+- Client-scoped portal project/comment access.
+- Public discovery restricted to published agency profiles.
+- CORS allow-list configuration.
+- Security headers including `nosniff`, frame policy, referrer policy, permissions policy, and optional HSTS.
+- Upload filename/type validation and size limits.
+- Safe attachment downloads with `Content-Disposition` attachment mode.
+- Idempotency for transcript and feedback/task conversion operations.
+- Provider and memory operations with failure/status recording.
+
+Additional production hardening planned in [TODO.md](TODO.md):
+
+- Redis-backed rate limiting and CSRF protection.
+- A full team-member/owner/admin/editor/viewer authorization matrix.
+- Private object storage and presigned URLs.
+- Background workers for long-running provider jobs.
+- Managed PostgreSQL backups and disaster-recovery procedures.
+
+> Redis is present as a configuration field but is not evidenced as a complete active rate-limiting or queue implementation. CSRF, team invitations, and presigned object storage should not be described as implemented.
+
+## API Overview
+
+Interactive API documentation is available from FastAPI at `/docs` when the backend is running.
+
+| Area | Representative routes |
+|---|---|
+| Health | `GET /api/health`, `GET /api/ready` |
+| Authentication | `POST /api/auth/setup`, `POST /api/auth/register/client`, `POST /api/auth/register/agency`, `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/me` |
+| Agency profile | `GET/PUT /api/agency/profile`, `POST /api/agency/profile/publish`, `POST /api/agency/profile/unpublish` |
+| Public discovery | `GET /api/discovery/agencies`, `GET /api/discovery/agencies/{workspace_id}` |
+| Client requests | `POST/GET /api/client/requests`, `GET/PATCH /api/client/requests/{id}`, `GET /api/client/requests/{id}/proposals`, accept/decline proposal routes |
+| Agency requests | `GET /api/agency/requests`, `GET /api/agency/requests/{id}`, create/update proposals |
+| Messaging | `POST/GET /api/requests/{id}/messages`, `GET /api/agency/requests/{id}/messages`, direct message routes |
+| Client/agency data | `GET/POST/PATCH/DELETE /api/clients`, `GET/POST/PATCH/DELETE /api/projects` |
+| Assets | `POST /api/projects/{id}/assets`, `GET /api/assets/{id}/download`, `GET /api/portal/assets/{id}/stream` |
+| Processing | `POST /api/process-transcript`, `GET /api/runs/{id}` |
+| Tasks | `GET/PATCH /api/tasks`, `POST /api/tasks/{id}/feedback` |
+| Feedback | `POST /api/feedback`, `POST /api/feedback/audio`, status/retry/confirmation routes, agency deliver/convert-task routes |
+| Portal | `POST /api/portal/auth/login`, project, comment, voice, decision, and feedback routes |
+| Intelligence | `/api/production-analytics`, `/api/projects/{id}/asset-intelligence`, `/api/clients/{id}/adaptive-knowledge` |
+
+For exact request schemas and route behavior, use the FastAPI OpenAPI document generated from [backend/app/main.py](backend/app/main.py) and the modular routers.
+
+## Project Structure
+
+```text
+FrameOPS/
+├── backend/
+│   ├── app/
+│   │   ├── main.py                 # FastAPI app, middleware, core routes
+│   │   ├── config.py               # Pydantic environment settings
+│   │   ├── db.py                   # SQLAlchemy engine and session
+│   │   ├── models.py               # ORM models
+│   │   ├── schemas.py              # API request/response schemas
+│   │   ├── security.py             # JWT, cookies, hashing, guards
+│   │   ├── routers/                # Auth, discovery, profile, requests, portal, feedback
+│   │   └── services/               # Groq, Hindsight, OpenClaw, analytics
+│   ├── alembic/versions/           # Linear database migrations
+│   ├── tests/                      # Unit and end-to-end API test suites
+│   ├── scripts/                    # Verification and workflow utilities
+│   ├── pyproject.toml
+│   └── Dockerfile
+├── frontend/
+│   ├── app/                        # Next.js App Router pages
+│   ├── components/                 # Shared and production UI components
+│   ├── lib/api.ts                  # API client
+│   ├── tests/                      # Node unit tests
+│   ├── package.json
+│   └── Dockerfile
+├── storage/uploads/                # Local uploaded file storage
+├── .env.example                    # Safe configuration template
+├── docker-compose.yml              # PostgreSQL, API, and frontend services
+├── ARCHITECTURE.md
+├── PROJECT_STATUS.md
+└── TODO.md
+```
+
+## Prerequisites
+
+### Native local development
+
+- Python 3.12 or newer
+- `uv` (recommended) or a Python virtual environment and `pip`
+- Node.js 20 or newer
+- npm
+
+### Optional integrations
+
+- Groq account/API key and enabled chat model
+- Hindsight deployment URL and token
+- OpenClaw CLI and gateway credentials
+- DaVinci Resolve on a downstream workstation when manually using synthesized task guidance
+
+Node.js 22 is used by the repository's frontend Docker image. No runtime version guarantee is made for external OpenClaw installations.
 
 ## Local Setup
 
-### Requirements
-- Python 3.12+
-- `uv` (recommended) or `pip` / `venv`
-- Node.js 20+ (Node.js 24.16+ for OpenClaw Gateway)
-- npm
+Run all commands from the repository root unless noted.
 
-### 1. Configuration (.env)
-Copy `.env.example` to `backend/.env`. Configure your environment variables:
-```ini
-AUTH_SECRET=your-secure-random-secret
-PORT=8001
-DATABASE_URL=sqlite:///./frameops.db
-FRONTEND_ORIGIN=http://localhost:3000
-CORS_ORIGINS=http://localhost:3000
-GROQ_API_KEY=your-groq-api-key
-GROQ_MODEL=openai/gpt-oss-120b
-HINDSIGHT_API_URL=https://api.hindsight.vectorize.io
-HINDSIGHT_API_TOKEN=your-hindsight-token
-OPENCLAW_GATEWAY_URL=ws://127.0.0.1:18789
-OPENCLAW_AUTH_TOKEN=your-openclaw-token
-OPENCLAW_AGENT_ID=frameops-synth
+### 1. Create backend configuration
+
+Copy the safe template:
+
+```powershell
+Copy-Item .env.example backend\.env
 ```
 
-### 2. Backend Startup
+Set at least `AUTH_SECRET` before creating accounts. Use your own random value; never reuse or commit a real secret.
+
+### 2. Install and initialize the backend
+
 ```powershell
 cd backend
 uv sync --extra dev
 uv run alembic upgrade head
-uv run uvicorn app.main:app --reload --port 8001
+uv run uvicorn app.main:app --reload --host 127.0.0.1 --port 8001
 ```
 
-### 3. Frontend Startup
-In a separate terminal:
+The API will be available at `http://127.0.0.1:8001`, with interactive docs at `http://127.0.0.1:8001/docs`.
+
+### 3. Install and start the frontend
+
+In another terminal:
+
 ```powershell
 cd frontend
-npm install
+npm ci
 npm run dev
 ```
 
-The frontend runs at `http://localhost:3000` and automatically proxies `/api/*` requests to the backend at `http://localhost:8001` via Next.js `rewrites()`.
+The frontend will run at `http://localhost:3000`.
 
----
+In development, `frontend/next.config.ts` rewrites `/api/:path*` to `BACKEND_URL` or `http://localhost:8001`. Keep the backend and frontend ports consistent.
 
-## API Outline
+### 4. Bootstrap the application
 
-### Core & Authentication
-- `GET /api/health`: Health status probe.
-- `GET /api/ready`: Provider configuration readiness probe.
-- `GET /api/auth/status`: Check initial setup completion.
-- `POST /api/auth/setup`: Initialize workspace and owner account.
-- `POST /api/auth/login`: Workspace owner sign-in (sets HttpOnly cookie).
-- `POST /api/auth/logout`: End session.
-- `GET /api/me`: Current authenticated user identity.
+Use the public client or agency registration routes/pages. The legacy workspace setup route remains available for initial workspace bootstrap and requires `AUTH_SECRET`.
 
-### Clients & Projects
-- `GET|POST /api/clients`: List or create clients (automatically initializes Hindsight memory bank).
-- `GET|PATCH|DELETE /api/clients/{id}`: Client details, updates, and deletion (pauses if Hindsight is unreachable).
-- `GET|POST /api/projects`: List or create projects. Supports status `"active"`, `"in_review"`, `"archived"`.
-- `GET|PATCH|DELETE /api/projects/{id}`: Project management.
+## Docker Compose
 
-### Production Pipeline
-- `POST /api/process-transcript`: Extract structured requirements (Groq token chunker), recall client preferences (Hindsight with graceful fallback), and synthesize DaVinci Resolve tasks (OpenClaw CLI).
-- `GET /api/runs/{id}`: Polling endpoint for processing run lifecycle and extractions.
-- `GET /api/tasks`: List production tasks with filters.
-- `GET|PATCH /api/tasks/{id}`: Task detail and editor status updates (`pending`, `in_progress`, `completed`).
-- `POST /api/tasks/{id}/feedback`: Record editor feedback and corrections.
-
-### Feedback Intelligence & Agency Bridge
-- `POST /api/feedback`: Submit client feedback text (requires `Idempotency-Key`).
-- `POST /api/feedback/audio`: Upload client audio feedback for Whisper transcription (with 429 exponential backoff).
-- `GET /api/feedback/{id}`: Feedback processing status.
-- `PATCH /api/feedback/{id}/confirmation`: Client confirmation of extracted requirements.
-- `GET /api/agency/feedback`: Agency view of all feedback items across workspace projects.
-- `POST /api/agency/feedback/{id}/deliver`: Mark feedback delivered to production.
-- `POST /api/agency/feedback/{id}/convert-task`: Convert delivered client feedback into production task (`source="client_feedback"`, idempotent).
-
-### Production Intelligence & Analytics
-- `GET /api/production-analytics`: Operational metrics, completion velocity, and workload distribution.
-- `GET /api/projects/{id}/asset-intelligence`: Evidence-based asset tracking.
-- `GET|POST /api/clients/{id}/adaptive-knowledge`: Client-specific knowledge extraction.
-
-### Client Review Portal
-- `POST /api/portal/auth/login`: Client portal authentication via passcode or access token (Argon2 verified; email-only rejected with 401).
-- `GET /api/portal/projects/{id}`: Client-scoped project view with review versions and assets.
-- `GET|POST /api/portal/projects/{id}/comments`: Timestamped video comments and threaded discussions.
-- `POST /api/portal/projects/{id}/submit-review`: Submit client approval or change requests (syncs confirmed preferences to Hindsight memory bank).
-- `GET /api/portal/assets/{id}/stream`: Media streaming endpoint supporting HTTP 206 Partial Content.
-
----
-
-## Testing & Verification
-
-### Layer A: Automated Offline Unit & Mock Tests
-Run on every commit without external API dependencies:
+The Compose stack uses PostgreSQL, the FastAPI Docker image, and the Next.js Docker image:
 
 ```powershell
-# Backend automated test suite (35 tests)
-backend\.venv\Scripts\pytest.exe backend\tests -v
-
-# Frontend unit tests (2 tests)
-npm --prefix frontend test
-
-# Frontend production build
-npm --prefix frontend run build
+Copy-Item .env.example .env
+docker compose up --build
 ```
 
-*Results:*
-- **Backend pytest**: 35 passed, 0 failed. Covers security auth, token expiration, client tenant isolation, SVG download protection, Groq chunker, Hindsight degradation fallback, feedback idempotency, and OpenClaw process wrappers.
-- **Frontend unit tests**: 2 passed, 0 failed. Covers workspace hydration and run state restoration.
-- **Frontend build**: 8/8 static and dynamic routes compile cleanly with 0 TypeScript/ESLint errors.
+Set `POSTGRES_PASSWORD`, `AUTH_SECRET`, and the remaining values in `.env`.
 
-### Layer B: Live Provider Smoke Tests
-Explicitly separated from automated mock tests:
-- **Live Groq API**: Verified HTTP 200 via `https://api.groq.com/openai/v1/models`.
-- **Live Hindsight Cloud**: Verified HTTP 200 via `https://api.hindsight.vectorize.io/v1/default/banks`.
-- **Live OpenClaw Gateway**: Verified local daemon socket connectivity at `ws://127.0.0.1:18789`.
-- **Live End-to-End Workflow**: Run `python backend/scripts/live_workflow.py` to exercise the full live pipeline against an isolated temporary database on port 8000.
+Defaults:
 
----
+- Frontend: `http://localhost:3000`
+- API: `http://localhost:8000`
+- PostgreSQL: internal Docker service `postgres:5432`
+- API uploads: named Docker volume `frameops-uploads`
 
-## Git & Repository Disposition
+The Compose API entrypoint applies Alembic migrations before starting Uvicorn on port `8000`. The frontend Docker build receives `NEXT_PUBLIC_API_URL`, defaulting to `http://localhost:8000`.
 
-- **Active Branch**: `main`
-- **Teammate Contributions Preserved**:
-  - `origin/Deekshith`: Ported into `feature/client-portal` and merged into `main`. Original branch preserved intact.
-  - `origin/feature/feedback-intelligence` (PR #1): Merged into `main`. Original branch preserved intact.
-  - `origin/feature/production-intelligence` (PR #2): Merged into `main`. Original branch preserved intact.
-  - Snapshot branches: `backup/main-pre-sync`, `backup/client-portal-pre-sync`, `backup/deekshith-pre-sync` preserved intact.
-- **Pre-Push Status**: 0 remote divergence (`git rev-list --count main..origin/main == 0`). Ready for user sign-off at Checkpoint 2.
+Stop the stack without deleting named volumes:
+
+```powershell
+docker compose down
+```
+
+Do not run database or volume reset commands unless you intentionally accept data loss.
+
+## Environment Variables
+
+Use [.env.example](.env.example) as the safe source template.
+
+| Variable | Used for | Local default/example |
+|---|---|---|
+| `AUTH_SECRET` | JWT signing; required before auth/setup | set a unique random secret |
+| `AUTH_COOKIE_SECURE` | Secure cookie attribute | `false` |
+| `AUTH_TOKEN_MINUTES` | JWT lifetime | settings default `720` |
+| `FRONTEND_ORIGIN` | application origin metadata | `http://localhost:3000` |
+| `CORS_ORIGINS` | comma-separated CORS allow-list | `http://localhost:3000` |
+| `DATABASE_URL` | SQLite or PostgreSQL SQLAlchemy URL | `sqlite:///./frameops.db` |
+| `GROQ_API_KEY` | Groq authentication | empty/unconfigured |
+| `GROQ_MODEL` | extraction chat model | empty/unconfigured |
+| `GROQ_BASE_URL` | Groq OpenAI-compatible base URL | `https://api.groq.com/openai/v1` |
+| `HINDSIGHT_API_URL` | Hindsight API base URL | empty/unconfigured |
+| `HINDSIGHT_API_TOKEN` | Hindsight bearer token | empty/unconfigured |
+| `OPENCLAW_GATEWAY_URL` | OpenClaw gateway URL | empty/unconfigured |
+| `OPENCLAW_AUTH_TOKEN` | OpenClaw gateway auth | empty/unconfigured |
+| `OPENCLAW_GATEWAY_TOKEN` | alternate gateway environment token | optional |
+| `OPENCLAW_AGENT_ID` | OpenClaw agent identity | `main` |
+| `OPENCLAW_BIN` | explicit OpenClaw executable | optional |
+| `OPENCLAW_NODE_BIN` | explicit Node executable | optional |
+| `UPLOAD_DIR` | local upload directory | `../storage/uploads` for backend cwd |
+| `MAX_UPLOAD_BYTES` | upload size limit | `26214400` |
+| `POSTGRES_PASSWORD` | Docker Compose PostgreSQL password | required for Compose |
+| `NEXT_PUBLIC_API_URL` | browser build/API URL in Compose | `http://localhost:8000` |
+| `BACKEND_URL` | Next.js server-side rewrite target | `http://localhost:8001` |
+| `LOG_LEVEL` | Python logging level | `INFO` |
+| `TRUSTED_PROXIES` | trusted proxy setting | `127.0.0.1,::1` |
+| `APP_ENV` | application environment label | `development` |
+
+Backend `.env` loading is also configured for `backend/.env`, `../.env`, and `.env`, in that settings configuration. Docker Compose reads the root `.env`.
+
+Never commit real credentials. The current environment may contain local `.env` or database files; this README does not reproduce or expose their contents.
+
+## Testing
+
+### Backend
+
+From the repository root:
+
+```powershell
+cd backend
+uv sync --extra dev
+uv run pytest --collect-only -q
+uv run pytest -q
+```
+
+The repository contains unit, boundary, combination, lifecycle, and browser-oriented test suites. Browser/E2E tests may require Playwright or additional local setup. The test configuration declares `backend/tests` and adds `backend` to `pythonpath`.
+
+The test suite is larger than the focused verification set documented in existing project status files. Some suite marks are also present without pytest marker registration; run output may include unknown-mark warnings.
+
+### Frontend
+
+```powershell
+npm --prefix frontend test
+npm --prefix frontend run build
+npm --prefix frontend run lint
+```
+
+`npm run lint` invokes `next lint`, a command that may depend on the installed Next.js CLI behavior for the pinned Next.js version.
+
+### Verification performed for this README update
+
+At the time of documentation validation:
+
+- Frontend unit tests: **2 passed**.
+- Frontend Next.js build: **18 routes generated successfully**.
+- A representative backend selection covering auth, discovery, requests, feedback, portal, intelligence, and provider mocks: **160 passed**.
+- Backend collection: **416 tests collected**.
+- A full live 416-test run was not executed, and provider connectivity was not re-probed with secrets during this README update.
+
+## Current Status
+
+### Implemented
+
+- Two-sided public registration and role-aware login.
+- Agency profile CRUD and publish/unpublish workflow.
+- Public agency discovery.
+- Client briefs and agency proposals.
+- Proposal acceptance with active project creation.
+- Request/project messaging.
+- Asset upload and download.
+- Client and agency dashboards.
+- Client review portal with review versions and timestamped comments.
+- Approval/change-request decisions.
+- Groq text extraction and audio transcription integration.
+- Hindsight client-bank recall/retain behavior.
+- OpenClaw task-synthesis invocation.
+- Production tasks, analytics, and feedback conversion.
+- SQLite WAL mode and PostgreSQL-compatible SQLAlchemy configuration.
+- Alembic migrations and Docker Compose.
+
+### Integration boundaries
+
+- External AI services require separately issued configuration.
+- Hindsight can degrade to empty recall without aborting synthesis.
+- OpenClaw must have an executable and accessible gateway configuration.
+- DaVinci Resolve is not controlled or automated by the backend.
+- No object-storage, Redis-backed queue/rate limit, or background-worker implementation is established in the repository.
+- The actual deployment host, TLS configuration, domain, and production provider status are unknown.
+- A public license is not declared in repository metadata inspected here.
+
+## Roadmap
+
+Based on repository TODO and architecture status:
+
+- [ ] Seed interactive demo agencies and sample client data.
+- [ ] Add Redis-backed auth mutation rate limiting.
+- [ ] Add CSRF protection for cookie-authenticated mutations.
+- [ ] Add team-member invitations and a full owner/admin/editor/viewer RBAC matrix.
+- [ ] Move uploads to private S3-compatible object storage with presigned URLs.
+- [ ] Add a background worker for transcription and synthesis jobs.
+- [ ] Configure production PostgreSQL backup and restore procedures.
+- [ ] Add centralized tracing, metrics, alerting, and structured operational dashboards.
+- [ ] Evaluate direct DaVinci Resolve automation or supported downstream integrations.
+- [ ] Add deployment manifests and production infrastructure documentation where applicable.
+
+## Contributing
+
+Repository ownership metadata identifies [HNK69](https://github.com/HNK69) as the maintainer. Before substantial changes:
+
+1. Preserve existing API compatibility and tenant boundaries.
+2. Add focused pytest or Node tests.
+3. Run the smallest relevant test set, then build/type-check the frontend.
+4. Include migrations for model changes.
+5. Keep external provider failures explicit and degraded rather than fabricated.
+6. Do not commit database files, local `.env` values, credentials, backups, or uploaded media.
+
+## License
+
+A license file or SPDX license declaration was not found in the inspected repository metadata. License terms are therefore unknown; obtain maintainer approval before redistribution or commercial reuse.
